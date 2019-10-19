@@ -6,18 +6,15 @@
 #include "Serial.h"
 #include "TempLookup.h"
 
-static void adcSetup();
-static int16_t adcRead(void);
+static void initIO();
+static int16_t adcRead(uint_fast8_t channel);
 
 int main(void)
 {
-	PORTB &= ~(1 << PORTB0);
-	DDRB |= (1 << DDB0);
-
-	adcSetup();
+	initIO();
 
 	//while (1) {
-	for(uint16_t adcVal = 254; adcVal <= 595; adcVal++) {
+	for(uint16_t adcVal = 250; adcVal <= 600; adcVal++) {
 		//uint16_t adcVal = adcRead();
 
 		uint16_t temp = getTemperature(adcVal);
@@ -33,25 +30,31 @@ int main(void)
 	for(;;);
 }
 
-void adcSetup()
+static void initIO()
 {
-	// Set the ADC input to PB2/ADC1, left adjust result
-	ADMUX = (1 << MUX1) | (0 << MUX0);// | (1 << ADLAR); // ADC2 (lower port)
-	// ADMUX = (1 << MUX1) | (0 << MUX0) | (1 << ADLAR); // ADC3 (upper port)
-	
-	ADCSRA |= (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
+	// ztx450 is on pin 5/PB0
+	PORTB &= ~(1 << PORTB0);
+	DDRB |= (1 << DDB0); // Set it as an output
 
-	// Start the first conversion
-	ADCSRA |= (1 << ADSC);
+	// ADC clock is CPUClock/8 or 150kHz at 1.2MHz
+	ADCSRA |= (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
 }
 
-int16_t adcRead(void)
+static int16_t adcRead(uint_fast8_t channel)
 {
-	int16_t adcResult;
-	adcResult = ADC; // For 10-bit resolution
+	switch(channel) {
+		case 0:
+			ADMUX = (1 << MUX1) | (0 << MUX0); // ADC2 (lower port)
+			break;
+		case 1:
+			ADMUX = (1 << MUX1) | (1 << MUX0); // ADC3 (upper port)
+			break;
+	}
+	
+	ADCSRA |= (1 << ADSC); // Start the conversion
+	while(ADCSRA & (1 << ADSC)); // Wait for conversion to complete
 
-	// Start the next conversion
-	ADCSRA |= (1 << ADSC);
+	int16_t adcResult = ADC; // 10-bit resolution
 
 	return adcResult;
 }
