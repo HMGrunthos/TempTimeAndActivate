@@ -4,6 +4,8 @@
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
 
+#include <util/delay.h>
+
 #include "Serial.h"
 #include "TempLookup.h"
 
@@ -23,6 +25,18 @@ static inline void setOutput(uint_fast8_t state);
 static int16_t adcRead(uint_fast8_t channel);
 static uint_fast8_t timeExpired(uint_fast16_t);
 static inline void resetTimer();
+
+#define RF_NREPEATTRANSMIT 10
+
+enum PulseType {
+	Sync,
+	Zero,
+	One
+};
+static char *getCodeWordB(uint_fast8_t nAddressCode, uint_fast8_t nChannelCode, uint_fast8_t bStatus);
+static void send(uint_least32_t code, uint_fast8_t length);
+static void transmit(enum PulseType pulse);
+static void sendTriState(const char *sCodeWord);
 
 uint_fast16_t timerTick;
 
@@ -47,6 +61,7 @@ int main(void)
 				break;
 			case Active:
 				if(timeExpired(TOTICKS(ONTIME)) {
+					sendTriState(getCodeWordB(1, 1, 0));
 					state = Inhibit;
 				} else {
 					state = Active;
@@ -54,17 +69,14 @@ int main(void)
 				break;
 			case Sensing:
 				if(timeExpired(TOTICKS(10)) {
-					
+					sendTriState(getCodeWordB(1, 1, 1));
 					state = Active;
 					resetTimer();
 				}
-			/*
 				if(tempInBand(adcFilters)) {
 					state = Active;
 					resetTimer();
-				} else {
-					state = Sensing;
-				}*/
+				}
 				break;
 		}
 		
@@ -153,9 +165,10 @@ static inline void setOutput(uint_fast8_t state)
 
 static inline void init()
 {
-	// ztx450 is on pin 5/PB0
-	PORTB &= ~(1 << PORTB0);
-	DDRB |= (1 << DDB0); // Set it as an output
+	// ZTX450 is on pin 5/PB0
+	// RF Tx on pin 6/PB1
+	PORTB &= ~(1 << PORTB2) & ~(1 << PORTB0);
+	DDRB |= (1 << DDB2) | (1 << DDB0); // Set it as an output
 
 	// ADC clock is CPUClock/8 or 150kHz at 1.2MHz
 	ADCSRA |= (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
@@ -189,4 +202,99 @@ static uint_fast8_t timeExpired(uint_fast16_t tLimit)
 ISR(TIM0_OVF_vect)
 {
 	timerTick++;
+}
+
+static char *getCodeWordB(uint_fast8_t nAddressCode, uint_fast8_t nChannelCode, uint_fast8_t bStatus)
+{
+	static char sReturn[13];
+	uint_fast8_t nReturnPos = 0;
+
+	for (uint_fast8_t i = 1; i <= 4; i++) {
+		sReturn[nReturnPos++] = (nAddressCode == i) ? '0' : 'F';
+	}
+
+	for (uint_fast8_t i = 1; i <= 4; i++) {
+		sReturn[nReturnPos++] = (nChannelCode == i) ? '0' : 'F';
+	}
+
+	sReturn[nReturnPos++] = 'F';
+	sReturn[nReturnPos++] = 'F';
+	sReturn[nReturnPos++] = 'F';
+
+	sReturn[nReturnPos++] = bStatus ? 'F' : '0';
+
+	sReturn[nReturnPos] = '\0';
+
+	return sReturn;
+}
+	
+static void send(uint_least32_t code, uint_fast8_t length)
+{
+	for(uint_fast8_t nRepeat = 0; nRepeat < RF_NREPEATTRANSMIT; nRepeat++) {
+		cli();
+			for (int_fast8_t i = length - 1; i >= 0; i--) {
+				if (code & (1L << i)) {
+					transmit(One);
+				} else {
+					transmit(Zero);
+				}
+			}
+			transmit(Sync);
+		sei();
+	}
+}
+
+#define PULSELENGTH 350
+static void transmit(enum PulseType pulse)
+{
+	PORTB |= (1 << PORTB2);
+	switch(pulse) {
+		case Sync:
+			_delay_us(PULSELENGTH * 1);
+			break;
+		case Zero:
+			_delay_us(PULSELENGTH * 1);
+			break;
+		case One:
+			_delay_us(PULSELENGTH * 3);
+			break;
+	}
+	PORTB &= ~(1 << PORTB2);
+	switch(pulse) {
+		case Sync:
+			_delay_us(PULSELENGTH * 31);
+			break;
+		case Zero:
+			_delay_us(PULSELENGTH * 3);
+			break;
+		case One:
+			_delay_us(PULSELENGTH * 1);
+			break;
+	}
+}
+
+static void sendTriState(const char *sCodeWord)
+{
+	// Turn the tristate code word into the corresponding bit pattern, then send it
+	uint_least32_t code = 0;
+	uint_fast8_t length = 0;
+
+	for (const char *p = sCodeWord; *p; p++) {
+		code <<= 2L;
+		switch (*p) {
+			case '0':
+				// bit pattern 00
+				break;
+			case 'F':
+				// bit pattern 01
+				code |= 1L;
+				break;
+			case '1':
+				// bit pattern 11
+				code |= 3L;
+				break;
+		}
+		length += 2;
+	}
+	send(code, length);
 }

@@ -11,12 +11,6 @@
 
 #include "Serial.h"
 
-#ifndef F_CPU
-	#define F_CPU (1200000UL)
-#endif  /* !F_CPU */
-
-#include <util/delay.h>
-
 // #define UART_RX_ENABLED // Enable UART RX
 // #define UART_TX_ENABLED // Enable UART TX
 
