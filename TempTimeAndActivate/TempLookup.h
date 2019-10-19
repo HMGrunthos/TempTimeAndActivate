@@ -27,7 +27,7 @@
 		static const char tempLu_FracChar[4][3] PROGMEM = {"00", "25", "50", "75"};
 	#endif
 	
-	static uint16_t getTemperature(uint16_t adcVal)
+	static uint16_t __attribute__ ((noinline)) getTemperature(uint16_t adcVal)
 	{
 		if(adcVal < TEMPLU_XMIN) {
 			return UINT16_MAX;
@@ -43,7 +43,7 @@
 			cIdx++;
 			adcVal -= TEMPLU_DXINXSCALE;
 		}
-	
+
 		uint16_t yLow = pgm_read_word(&tempLu_ADCTempLUT[cIdx]);
 		uint16_t yHigh = pgm_read_word(&tempLu_ADCTempLUT[cIdx+1]);
 		uint16_t grad = ((yLow - yHigh) << TEMPLU_GRADSCALEPWR)/TEMPLU_DXINXSCALE; // Gradient
