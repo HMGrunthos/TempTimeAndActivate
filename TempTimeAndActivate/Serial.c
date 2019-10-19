@@ -17,7 +17,7 @@
 
 #include <util/delay.h>
 
-//#define UART_RX_ENABLED // Enable UART RX
+// #define UART_RX_ENABLED // Enable UART RX
 #define UART_TX_ENABLED // Enable UART TX
 
 #if defined(UART_TX_ENABLED) && !defined(UART_TX)

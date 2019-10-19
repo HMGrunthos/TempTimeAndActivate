@@ -8,6 +8,8 @@
 #ifndef TEMPLOOKUP_H_
 	#define TEMPLOOKUP_H_
 	
+	#include <avr/pgmspace.h>
+	
 	// #define PRINTTEMP
 
 	#define TEMPLU_XMIN 254
@@ -18,6 +20,8 @@
 	#define TEMPLU_GRADSCALEPWR 5
 	#define TEMPLU_TABLESIZE 32
 	static const uint16_t tempLu_ADCTempLUT[TEMPLU_TABLESIZE] PROGMEM = {49010, 47481, 46008, 44583, 43203, 41864, 40563, 39296, 38061, 36854, 35675, 34519, 33386, 32274, 31181, 30105, 29045, 28000, 26968, 25948, 24939, 23940, 22949, 21967, 20991, 20020, 19055, 18093, 17135, 16179, 15223, TEMPLU_MINTEMP};
+
+	#define TL_TOFIXEDPOINT(inDegC) ((uint16_t)(inDegC*(float)(1<<TEMPLU_YSCALEPOWER) + 0.5))
 
 	#ifdef PRINTTEMP
 		static const char tempLu_FracChar[4][3] PROGMEM = {"00", "25", "50", "75"};
@@ -50,7 +54,7 @@
 			uint16_t tempRndF = temp + (1<<(TEMPLU_YSCALEPOWER - 3)); // Temperature rounded for display
 
 			char buff[10];
-			uartPuts("Temp:");
+			uartPuts_P(PSTR("Temp:"));
 			utoa(tempRndF >> TEMPLU_YSCALEPOWER, buff, 10);
 			uartPuts(buff);
 			uartPutc('.');
