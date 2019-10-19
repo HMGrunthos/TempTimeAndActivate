@@ -18,7 +18,7 @@
 #include <util/delay.h>
 
 // #define UART_RX_ENABLED // Enable UART RX
-#define UART_TX_ENABLED // Enable UART TX
+// #define UART_TX_ENABLED // Enable UART TX
 
 #if defined(UART_TX_ENABLED) && !defined(UART_TX)
 	#define UART_TX PB3 // Use PB3 as TX pin

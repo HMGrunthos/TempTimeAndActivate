@@ -10,7 +10,7 @@
 #define ONTIME 50 // In seconds
 #define TARGETTEMP 30.6 // Target temperature
 #define TEMPBAND 1.5 // Allowed slop
-#define NCHAN 1 // Number of temperature channels to monitor
+#define NCHAN 2 // Number of temperature channels to monitor
 
 static inline void init();
 static inline void initFilters(uint16_t *adcFilters);
@@ -18,6 +18,9 @@ static inline void updateFilters(uint16_t *adcFilters);
 static inline uint_fast8_t tempInBand(uint16_t *adcFilters);
 static int16_t adcRead(uint_fast8_t channel);
 static inline void setOutput(uint_fast8_t state);
+static inline uint_fast8_t onTimeExpired();
+
+uint_fast8_t timerTick;
 
 enum MachineStates {
 	Inhibit,
@@ -32,8 +35,6 @@ int main(void)
 	init();
 	initFilters(adcFilters);
 
-	// uartPuts_P(PSTR("\nStartup\n"));
-
 	enum MachineStates state = Sensing;
 	while (1) {
 		switch(state) {
@@ -45,7 +46,7 @@ int main(void)
 				sleep_cpu();
 				break;
 			case Active:
-				if(timedOut()) {
+				if(onTimeExpired()) {
 					state = Inhibit;
 				} else {
 					state = Active;
@@ -55,6 +56,9 @@ int main(void)
 				updateFilters(adcFilters);
 				if(tempInBand(adcFilters)) {
 					state = Active;
+					cli();
+						timerTick = 0;
+					sei();
 				} else {
 					state = Sensing;
 				}
@@ -81,6 +85,12 @@ static inline void init()
 
 	// ADC clock is CPUClock/8 or 150kHz at 1.2MHz
 	ADCSRA |= (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
+
+	OCR0A = 116; // At about 10Hz at 1.2MHz (9.6MHz/8)
+	TCCR0A = (1<<WGM01); // CTC mode
+	TCCR0B = (1<<CS02) | (1<<CS00); // Divide input clock by 1024
+	TIMSK0 = (1<<OCIE0A); // Enable interrupts
+	sei();
 	
 	adcRead(0);
 	setOutput(0);
@@ -150,5 +160,25 @@ static inline void setOutput(uint_fast8_t state)
 		PORTB |= (1 << PORTB0);
 	} else {
 		PORTB &= ~(1 << PORTB0);
+	}
+}
+
+static inline uint_fast8_t onTimeExpired()
+{
+	uint_fast8_t tVal;
+	cli();
+		tVal = timerTick;
+	sei();
+	return tVal >= ONTIME;
+}
+
+ISR(TIM0_COMPA_vect)
+{
+	static uint_fast8_t iSubSec;
+	
+	iSubSec++;
+	if(iSubSec == 10) {
+		iSubSec = 0;
+		timerTick++;
 	}
 }
