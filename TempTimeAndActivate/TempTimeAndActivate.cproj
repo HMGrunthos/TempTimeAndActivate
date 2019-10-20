@@ -141,6 +141,9 @@
     <Compile Include="BWM.c">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="Random.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="RFSwitch.h">
       <SubType>compile</SubType>
     </Compile>

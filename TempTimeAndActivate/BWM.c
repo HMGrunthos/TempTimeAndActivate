@@ -7,25 +7,23 @@
 #include "Serial.h"
 #include "TempLookup.h"
 #include "RFSwitch.h"
+#include "Random.h"
 
-#define ONTIME 10 // In seconds
-#define TARGETTEMP 30.6 // Target temperature
-#define TEMPBAND 1.5 // Allowed slop
-#define NCHAN 1 // Number of temperature channels to monitor
+#define ONTIME 50 // In seconds
+#define TARGETTEMP 42 // Target temperature
+#define TEMPBAND 2 // Allowed slop
+#define NCHAN 2 // Number of temperature channels to monitor
 
-//#define WAITTIME 7200
-//#define RANDMAXDELAY 12600
-//#define WARMTIME 1800
-
-#define WAITTIME 30
-#define RANDMAXDELAY 90
-#define WARMTIME 20
+#define WAITTIME 7200
+#define WARMTIME 1800
+// #define WAITTIME 20
+// #define WARMTIME 30
 
 #define RFADDRESS 0
 #define RFCHANNEL 0
 
 #define TICKPERIOD 0.2184533333
-#define TOTICKS(period) ((uint_fast16_t)(period)/(float)TICKPERIOD + 0.5))
+#define TOTICKS(period) ((uint_fast16_t)(period)/(float)TICKPERIOD + 0.5)
 	
 static inline void init();
 static inline void initFilters(uint16_t *adcFilters);
@@ -33,10 +31,10 @@ static inline void updateFilters(uint16_t *adcFilters);
 static inline uint_fast8_t tempInBand(uint16_t *adcFilters);
 static inline void setOutput(uint_fast8_t state);
 static int16_t adcRead(uint_fast8_t channel);
-static uint_fast8_t timeExpired(uint_fast16_t);
+static uint_fast8_t __attribute__ ((noinline)) timeExpired(uint_fast16_t);
 static inline void resetTimer();
 
-uint_fast16_t timerTick;
+volatile static uint_fast16_t timerTick;
 
 enum TempMachineStates {
 	Inhibit,
@@ -54,12 +52,29 @@ enum TimerMachineStates {
 int main(void)
 {
 	uint16_t adcFilters[NCHAN];
-	uint16_t randomDelay = RANDMAXDELAY;
+	uint16_t randomDelay;
 
 	init();
+
+//randomDelay = TOTICKS(10);
+
+	// Initialize the random number generator using ADC noise
+	uint_fast8_t runToggle;
+	uint_fast8_t adcLast;
+	for(uint_fast8_t tCnt = 32; tCnt != 0;) {
+		uint_fast8_t adcNew = adcRead(0);
+		if(adcNew != adcLast) {
+			runToggle = !runToggle;
+			tCnt--;
+		}
+		adcLast = adcNew;
+		if(runToggle) {
+			randomDelay = random16();
+		}
+	}
+
 	initFilters(adcFilters);
 	resetTimer();
-
 	enum TempMachineStates tempState = Sensing;
 	enum TimerMachineStates timeState = Wait;
 	while (1) {
@@ -73,7 +88,7 @@ int main(void)
 				break;
 			case Active:
 				setOutput(1);
-				if(timeExpired(TOTICKS(ONTIME)) {
+				if(timeExpired(TOTICKS(ONTIME))) {
 					tempState = Inhibit;
 				}
 				break;
@@ -93,20 +108,20 @@ int main(void)
 			case Expired:
 				break;
 			case Warm:
-				if(timeExpired(TOTICKS(WARMTIME)) {
+				if(timeExpired(TOTICKS(WARMTIME))) {
 					send(getCodeWord(RFADDRESS, RFCHANNEL, 0));
 					timeState = Expired;
 				}
 				break;
 			case Delay:
-				if(timeExpired(TOTICKS(randomDelay)) {
+				if(timeExpired(randomDelay)) {
 					send(getCodeWord(RFADDRESS, RFCHANNEL, 1));
 					timeState = Warm;
 					resetTimer();
 				}
 				break;
 			case Wait:
-				if(timeExpired(TOTICKS(WAITTIME)) {
+				if(timeExpired(TOTICKS(WAITTIME))) {
 					timeState = Delay;
 					resetTimer();
 				}
@@ -192,9 +207,6 @@ static inline void init()
 	TCCR0B = (1<<CS02) | (1<<CS00); // Divide input clock by 1024
 	TIMSK0 = (1<<TOIE0); // Enable interrupts, they tick at 4.577636719Hz
 	sei();
-	
-	adcRead(0);
-	setOutput(0);
 }
 
 static inline void resetTimer()
@@ -203,8 +215,8 @@ static inline void resetTimer()
 		timerTick = 0;
 	sei();
 }
-					
-static uint_fast8_t timeExpired(uint_fast16_t tLimit)
+
+static uint_fast8_t __attribute__ ((noinline)) timeExpired(uint_fast16_t tLimit)
 {
 	uint_fast16_t tVal;
 
