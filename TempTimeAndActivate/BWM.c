@@ -4,15 +4,25 @@
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
 
-#include <util/delay.h>
-
 #include "Serial.h"
 #include "TempLookup.h"
+#include "RFSwitch.h"
 
-#define ONTIME 50 // In seconds
+#define ONTIME 10 // In seconds
 #define TARGETTEMP 30.6 // Target temperature
 #define TEMPBAND 1.5 // Allowed slop
-#define NCHAN 2 // Number of temperature channels to monitor
+#define NCHAN 1 // Number of temperature channels to monitor
+
+//#define WAITTIME 7200
+//#define RANDMAXDELAY 12600
+//#define WARMTIME 1800
+
+#define WAITTIME 30
+#define RANDMAXDELAY 90
+#define WARMTIME 20
+
+#define RFADDRESS 0
+#define RFCHANNEL 0
 
 #define TICKPERIOD 0.2184533333
 #define TOTICKS(period) ((uint_fast16_t)(period)/(float)TICKPERIOD + 0.5))
@@ -26,61 +36,34 @@ static int16_t adcRead(uint_fast8_t channel);
 static uint_fast8_t timeExpired(uint_fast16_t);
 static inline void resetTimer();
 
-#define RF_NREPEATTRANSMIT 10
-
-enum PulseType {
-	Sync,
-	Zero,
-	One
-};
-static char *getCodeWordB(uint_fast8_t nAddressCode, uint_fast8_t nChannelCode, uint_fast8_t bStatus);
-static void send(uint_least32_t code, uint_fast8_t length);
-static void transmit(enum PulseType pulse);
-static void sendTriState(const char *sCodeWord);
-
 uint_fast16_t timerTick;
 
-enum MachineStates {
+enum TempMachineStates {
 	Inhibit,
 	Active,
 	Sensing
 };
 
+enum TimerMachineStates {
+	Expired,
+	Warm,
+	Delay,
+	Wait
+};
+
 int main(void)
 {
 	uint16_t adcFilters[NCHAN];
+	uint16_t randomDelay = RANDMAXDELAY;
 
 	init();
 	initFilters(adcFilters);
+	resetTimer();
 
-	enum MachineStates state = Sensing;
+	enum TempMachineStates tempState = Sensing;
+	enum TimerMachineStates timeState = Wait;
 	while (1) {
-		switch(state) {
-			case Inhibit:
-				state = Inhibit; // Stay in Inhibit
-				break;
-			case Active:
-				if(timeExpired(TOTICKS(ONTIME)) {
-					sendTriState(getCodeWordB(1, 1, 0));
-					state = Inhibit;
-				} else {
-					state = Active;
-				}
-				break;
-			case Sensing:
-				if(timeExpired(TOTICKS(10)) {
-					sendTriState(getCodeWordB(1, 1, 1));
-					state = Active;
-					resetTimer();
-				}
-				if(tempInBand(adcFilters)) {
-					state = Active;
-					resetTimer();
-				}
-				break;
-		}
-		
-		switch(state) {
+		switch(tempState) {
 			case Inhibit:
 				setOutput(0);
 				set_sleep_mode(SLEEP_MODE_PWR_DOWN); // Now go to sleep
@@ -88,12 +71,45 @@ int main(void)
 				sleep_enable();
 				sleep_cpu();
 				break;
+			case Active:
+				setOutput(1);
+				if(timeExpired(TOTICKS(ONTIME)) {
+					tempState = Inhibit;
+				}
+				break;
 			case Sensing:
 				setOutput(0);
 				updateFilters(adcFilters);
+				if(tempInBand(adcFilters)) {
+					tempState = Active;
+					timeState = Expired;
+					send(getCodeWord(RFADDRESS, RFCHANNEL, 0));
+					resetTimer();
+				}
 				break;
-			case Active:
-				setOutput(1);
+		}
+
+		switch(timeState) {
+			case Expired:
+				break;
+			case Warm:
+				if(timeExpired(TOTICKS(WARMTIME)) {
+					send(getCodeWord(RFADDRESS, RFCHANNEL, 0));
+					timeState = Expired;
+				}
+				break;
+			case Delay:
+				if(timeExpired(TOTICKS(randomDelay)) {
+					send(getCodeWord(RFADDRESS, RFCHANNEL, 1));
+					timeState = Warm;
+					resetTimer();
+				}
+				break;
+			case Wait:
+				if(timeExpired(TOTICKS(WAITTIME)) {
+					timeState = Delay;
+					resetTimer();
+				}
 				break;
 		}
 	}
@@ -202,99 +218,4 @@ static uint_fast8_t timeExpired(uint_fast16_t tLimit)
 ISR(TIM0_OVF_vect)
 {
 	timerTick++;
-}
-
-static char *getCodeWordB(uint_fast8_t nAddressCode, uint_fast8_t nChannelCode, uint_fast8_t bStatus)
-{
-	static char sReturn[13];
-	uint_fast8_t nReturnPos = 0;
-
-	for (uint_fast8_t i = 1; i <= 4; i++) {
-		sReturn[nReturnPos++] = (nAddressCode == i) ? '0' : 'F';
-	}
-
-	for (uint_fast8_t i = 1; i <= 4; i++) {
-		sReturn[nReturnPos++] = (nChannelCode == i) ? '0' : 'F';
-	}
-
-	sReturn[nReturnPos++] = 'F';
-	sReturn[nReturnPos++] = 'F';
-	sReturn[nReturnPos++] = 'F';
-
-	sReturn[nReturnPos++] = bStatus ? 'F' : '0';
-
-	sReturn[nReturnPos] = '\0';
-
-	return sReturn;
-}
-	
-static void send(uint_least32_t code, uint_fast8_t length)
-{
-	for(uint_fast8_t nRepeat = 0; nRepeat < RF_NREPEATTRANSMIT; nRepeat++) {
-		cli();
-			for (int_fast8_t i = length - 1; i >= 0; i--) {
-				if (code & (1L << i)) {
-					transmit(One);
-				} else {
-					transmit(Zero);
-				}
-			}
-			transmit(Sync);
-		sei();
-	}
-}
-
-#define PULSELENGTH 350
-static void transmit(enum PulseType pulse)
-{
-	PORTB |= (1 << PORTB2);
-	switch(pulse) {
-		case Sync:
-			_delay_us(PULSELENGTH * 1);
-			break;
-		case Zero:
-			_delay_us(PULSELENGTH * 1);
-			break;
-		case One:
-			_delay_us(PULSELENGTH * 3);
-			break;
-	}
-	PORTB &= ~(1 << PORTB2);
-	switch(pulse) {
-		case Sync:
-			_delay_us(PULSELENGTH * 31);
-			break;
-		case Zero:
-			_delay_us(PULSELENGTH * 3);
-			break;
-		case One:
-			_delay_us(PULSELENGTH * 1);
-			break;
-	}
-}
-
-static void sendTriState(const char *sCodeWord)
-{
-	// Turn the tristate code word into the corresponding bit pattern, then send it
-	uint_least32_t code = 0;
-	uint_fast8_t length = 0;
-
-	for (const char *p = sCodeWord; *p; p++) {
-		code <<= 2L;
-		switch (*p) {
-			case '0':
-				// bit pattern 00
-				break;
-			case 'F':
-				// bit pattern 01
-				code |= 1L;
-				break;
-			case '1':
-				// bit pattern 11
-				code |= 3L;
-				break;
-		}
-		length += 2;
-	}
-	send(code, length);
 }
