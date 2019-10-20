@@ -57,7 +57,7 @@
 			uartPuts(buff);
 			uartPutc('.');
 			uartPuts_P(tempLu_FracChar[(tempRndF >> (TEMPLU_YSCALEPOWER-2)) & 0x3]);
-			uartPuts(":\n");
+			uartPuts_P(PSTR(":\n"));
 		#endif
 
 		return temp;

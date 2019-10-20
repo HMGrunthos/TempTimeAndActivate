@@ -16,8 +16,8 @@
 
 #define WAITTIME 7200
 #define WARMTIME 1800
-// #define WAITTIME 20
-// #define WARMTIME 30
+//#define WAITTIME 5
+//#define WARMTIME 30
 
 #define RFADDRESS 0
 #define RFCHANNEL 0
@@ -53,35 +53,15 @@ int main(void)
 {
 	uint16_t adcFilters[NCHAN];
 	uint16_t randomDelay;
-
-	random16InitFromEEPROM(); // This is before the HW init because I don't want interrupts while I'm accessing the eeprom
+	
+	random16InitFromEEPROM(); // This is before the HW init because I don't want interrupts while I'm accessing the EEPROM
 
 	initHW();
 
-//randomDelay = TOTICKS(10);
-
 	randomDelay = random16();
 
-/*
-	random16InitFromSeed(0xbeef);
-	// Initialize the random number generator using ADC noise
-	uint_fast8_t runToggle;
-	uint_fast8_t adcLast;
-	for(uint_fast8_t tCnt = 32; tCnt != 0;) {
-		uint_fast8_t adcNew = adcRead(0);
-		if(adcNew != adcLast) {
-			runToggle = !runToggle;
-			tCnt--;
-		}
-		adcLast = adcNew;
-		if(runToggle) {
-			randomDelay = random16();
-		}
-	}
-*/
-
-	initFilters(adcFilters);
 	resetTimer();
+	initFilters(adcFilters);
 	enum TempMachineStates tempState = Sensing;
 	enum TimerMachineStates timeState = Wait;
 	while (1) {
@@ -213,6 +193,7 @@ static inline void initHW()
 
 	TCCR0B = (1<<CS02) | (1<<CS00); // Divide input clock by 1024
 	TIMSK0 = (1<<TOIE0); // Enable interrupts, they tick at 4.577636719Hz
+
 	sei();
 }
 

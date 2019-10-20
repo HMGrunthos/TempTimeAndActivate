@@ -19,7 +19,7 @@
 #endif  /* !UART_TX */
 
 #if defined(UART_RX_ENABLED) && !defined(UART_RX)
-	#define UART_RX PB4 // Use PB4 as RX pin
+	#define UART_RX PB3 // Use PB3 as RX pin
 #endif  /* !UART_RX */
 
 #if (defined(UART_TX_ENABLED) || defined(UART_RX_ENABLED)) && !defined(UART_BAUDRATE)
