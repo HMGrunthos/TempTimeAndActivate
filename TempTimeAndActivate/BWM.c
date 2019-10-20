@@ -16,8 +16,8 @@
 
 #define WAITTIME 7200
 #define WARMTIME 1800
-//#define WAITTIME 5
-//#define WARMTIME 30
+//#define WAITTIME 70
+//#define WARMTIME 3600
 
 #define RFADDRESS 0
 #define RFCHANNEL 0
@@ -59,6 +59,7 @@ int main(void)
 	initHW();
 
 	randomDelay = random16();
+	//randomDelay = TOTICKS(10);
 
 	resetTimer();
 	initFilters(adcFilters);
