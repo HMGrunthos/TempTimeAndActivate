@@ -25,13 +25,13 @@
 #define TICKPERIOD 0.2184533333
 #define TOTICKS(period) ((uint_fast16_t)(period)/(float)TICKPERIOD + 0.5)
 	
-static inline void init();
+static inline void initHW();
 static inline void initFilters(uint16_t *adcFilters);
 static inline void updateFilters(uint16_t *adcFilters);
-static inline uint_fast8_t tempInBand(uint16_t *adcFilters);
-static inline void setOutput(uint_fast8_t state);
-static int16_t adcRead(uint_fast8_t channel);
-static uint_fast8_t __attribute__ ((noinline)) timeExpired(uint_fast16_t);
+static inline uint_fast8_t tempInBand(const uint16_t *adcFilters);
+static inline void setOutput(const uint_fast8_t state);
+static int16_t adcRead(const uint_fast8_t channel);
+static uint_fast8_t __attribute__ ((noinline)) timeExpired(const uint_fast16_t);
 static inline void resetTimer();
 
 volatile static uint_fast16_t timerTick;
@@ -54,10 +54,16 @@ int main(void)
 	uint16_t adcFilters[NCHAN];
 	uint16_t randomDelay;
 
-	init();
+	random16InitFromEEPROM(); // This is before the HW init because I don't want interrupts while I'm accessing the eeprom
+
+	initHW();
 
 //randomDelay = TOTICKS(10);
 
+	randomDelay = random16();
+
+/*
+	random16InitFromSeed(0xbeef);
 	// Initialize the random number generator using ADC noise
 	uint_fast8_t runToggle;
 	uint_fast8_t adcLast;
@@ -72,6 +78,7 @@ int main(void)
 			randomDelay = random16();
 		}
 	}
+*/
 
 	initFilters(adcFilters);
 	resetTimer();
@@ -130,6 +137,15 @@ int main(void)
 	}
 }
 
+static inline void setOutput(const uint_fast8_t state)
+{
+	if(state == 0) {
+		PORTB &= ~(1 << PORTB0);
+	} else {
+		PORTB |= (1 << PORTB0);
+	}
+}
+
 static inline void initFilters(uint16_t *adcFilters)
 {
 	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
@@ -147,7 +163,7 @@ static inline void updateFilters(uint16_t *adcFilters)
 	}
 }
 
-static inline uint_fast8_t tempInBand(uint16_t *adcFilters)
+static inline uint_fast8_t tempInBand(const uint16_t *adcFilters)
 {
 	uint16_t temps[NCHAN];
 	
@@ -169,7 +185,7 @@ static inline uint_fast8_t tempInBand(uint16_t *adcFilters)
 	return inBand;
 }
 
-static int16_t adcRead(uint_fast8_t channel)
+static int16_t adcRead(const uint_fast8_t channel)
 {
 	if(channel == 0) {
 		ADMUX = (1 << MUX1) | (0 << MUX0); // ADC2 (lower port)
@@ -185,16 +201,7 @@ static int16_t adcRead(uint_fast8_t channel)
 	return adcResult;
 }
 
-static inline void setOutput(uint_fast8_t state)
-{
-	if(state == 0) {
-		PORTB &= ~(1 << PORTB0);
-	} else {
-		PORTB |= (1 << PORTB0);
-	}
-}
-
-static inline void init()
+static inline void initHW()
 {
 	// ZTX450 is on pin 5/PB0
 	// RF Tx on pin 6/PB1
@@ -216,7 +223,7 @@ static inline void resetTimer()
 	sei();
 }
 
-static uint_fast8_t __attribute__ ((noinline)) timeExpired(uint_fast16_t tLimit)
+static uint_fast8_t timeExpired(const uint_fast16_t tLimit)
 {
 	uint_fast16_t tVal;
 
