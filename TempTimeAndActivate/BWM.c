@@ -36,6 +36,8 @@ static void resetTimer();
 
 volatile static uint_fast16_t timerTick;
 
+#define FIX_POINTER(_ptr) __asm__ __volatile__("" : "=b" (_ptr) : "0" (_ptr))
+
 enum TempMachineStates {
 	Inhibit,
 	Active,
@@ -58,7 +60,7 @@ int main(void)
 	initHW();
 
 	#ifndef DISABLE_TIMING
-		uint16_t randomDelay = random16(); // 0 to 4 hours
+		uint16_t randomDelay = getLastRandomNumber(); // 0 to 4 hours
 		randomDelay -= randomDelay >> 2; // 0 to 3 hours
 		// randomDelay = randomDelay >> 1; // 0 to 2 hours
 		// randomDelay = TOTICKS(10); // Ten seconds
@@ -152,7 +154,7 @@ static void updateFilters(uint16_t *adcFilters)
 }
 
 static uint_fast8_t tempInBand(const uint16_t *adcFilters)
-{	
+{
 	uint_fast8_t inBand = 1;
 	
 	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
