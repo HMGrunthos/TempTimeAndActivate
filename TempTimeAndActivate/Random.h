@@ -53,10 +53,5 @@
 		EEDR = randomNumber >> 8;
 		EECR |= (1<<EEMPE);
 		EECR |= (1<<EEPE);
-/*
-		uint16_t oldSeed = eeprom_read_word(&randomSeed);
-		uint16_t newSeed = lfsr16_next(oldSeed);
-		eeprom_write_word(&randomSeed, newSeed);
-*/
 	}
 #endif /* RANDOM_H_ */

@@ -9,8 +9,10 @@
 #include "RFSwitch.h"
 #include "Random.h"
 
+// #define DISABLE_TIMING
+
 #define ONTIME 50 // In seconds
-#define TARGETTEMP 42 // Target temperature
+#define TARGETTEMP 41 // Target temperature
 #define TEMPBAND 2 // Allowed slop
 #define NCHAN 2 // Number of temperature channels to monitor
 
@@ -52,14 +54,17 @@ enum TimerMachineStates {
 int main(void)
 {
 	uint16_t adcFilters[NCHAN];
-	uint16_t randomDelay;
 	
 	random16InitFromEEPROM(); // This is before the HW init because I don't want interrupts while I'm accessing the EEPROM
 
 	initHW();
 
-	randomDelay = random16();
-	//randomDelay = TOTICKS(10);
+	#ifndef DISABLE_TIMING
+		uint16_t randomDelay = random16(); // 0 to 4 hours
+		randomDelay -= randomDelay>>2; // 0 to 3 hours
+		// randomDelay = randomDelay>>1; // 0 to 2 hours
+		// randomDelay = TOTICKS(10); // Ten seconds
+	#endif // DISABLE_TIMING
 
 	resetTimer();
 	initFilters(adcFilters);
@@ -86,35 +91,39 @@ int main(void)
 				if(tempInBand(adcFilters)) {
 					tempState = Active;
 					timeState = Expired;
-					send(getCodeWord(RFADDRESS, RFCHANNEL, 0));
+					#ifndef DISABLE_TIMING
+						send(getCodeWord(RFADDRESS, RFCHANNEL, 0));
+					#endif // DISABLE_TIMING
 					resetTimer();
 				}
 				break;
 		}
-
-		switch(timeState) {
-			case Expired:
+		
+		#ifndef DISABLE_TIMING
+			switch(timeState) {
+				case Expired:
 				break;
-			case Warm:
+				case Warm:
 				if(timeExpired(TOTICKS(WARMTIME))) {
 					send(getCodeWord(RFADDRESS, RFCHANNEL, 0));
 					timeState = Expired;
 				}
 				break;
-			case Delay:
+				case Delay:
 				if(timeExpired(randomDelay)) {
 					send(getCodeWord(RFADDRESS, RFCHANNEL, 1));
 					timeState = Warm;
 					resetTimer();
 				}
 				break;
-			case Wait:
+				case Wait:
 				if(timeExpired(TOTICKS(WAITTIME))) {
 					timeState = Delay;
 					resetTimer();
 				}
 				break;
-		}
+			}
+		#endif // DISABLE_TIMING
 	}
 }
 
