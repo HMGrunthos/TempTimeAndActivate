@@ -16,10 +16,8 @@
 #define TEMPBAND 2 // Allowed slop
 #define NCHAN 2 // Number of temperature channels to monitor
 
-#define WAITTIME 7200
-#define WARMTIME 1800
-//#define WAITTIME 70
-//#define WARMTIME 3600
+#define WAITTIME 7200 // Two hours
+#define WARMTIME 1800 // Thirty minutes
 
 #define RFADDRESS 0
 #define RFCHANNEL 0
@@ -27,14 +25,14 @@
 #define TICKPERIOD 0.2184533333
 #define TOTICKS(period) ((uint_fast16_t)(period)/(float)TICKPERIOD + 0.5)
 	
-static inline void initHW();
-static inline void initFilters(uint16_t *adcFilters);
-static inline void updateFilters(uint16_t *adcFilters);
-static inline uint_fast8_t tempInBand(const uint16_t *adcFilters);
-static inline void setOutput(const uint_fast8_t state);
+static void initHW();
+static void initFilters(uint16_t *adcFilters);
+static void updateFilters(uint16_t *adcFilters);
+static uint_fast8_t tempInBand(const uint16_t *adcFilters);
+static void setOutput(const uint_fast8_t state);
 static int16_t adcRead(const uint_fast8_t channel);
 static uint_fast8_t __attribute__ ((noinline)) timeExpired(const uint_fast16_t);
-static inline void resetTimer();
+static void resetTimer();
 
 volatile static uint_fast16_t timerTick;
 
@@ -61,8 +59,8 @@ int main(void)
 
 	#ifndef DISABLE_TIMING
 		uint16_t randomDelay = random16(); // 0 to 4 hours
-		randomDelay -= randomDelay>>2; // 0 to 3 hours
-		// randomDelay = randomDelay>>1; // 0 to 2 hours
+		randomDelay -= randomDelay >> 2; // 0 to 3 hours
+		// randomDelay = randomDelay >> 1; // 0 to 2 hours
 		// randomDelay = TOTICKS(10); // Ten seconds
 	#endif // DISABLE_TIMING
 
@@ -89,11 +87,11 @@ int main(void)
 				setOutput(0);
 				updateFilters(adcFilters);
 				if(tempInBand(adcFilters)) {
-					tempState = Active;
-					timeState = Expired;
 					#ifndef DISABLE_TIMING
 						send(getCodeWord(RFADDRESS, RFCHANNEL, 0));
 					#endif // DISABLE_TIMING
+					tempState = Active;
+					timeState = Expired;
 					resetTimer();
 				}
 				break;
@@ -102,32 +100,32 @@ int main(void)
 		#ifndef DISABLE_TIMING
 			switch(timeState) {
 				case Expired:
-				break;
+					break;
 				case Warm:
-				if(timeExpired(TOTICKS(WARMTIME))) {
-					send(getCodeWord(RFADDRESS, RFCHANNEL, 0));
-					timeState = Expired;
-				}
-				break;
+					if(timeExpired(TOTICKS(WARMTIME))) {
+						send(getCodeWord(RFADDRESS, RFCHANNEL, 0));
+						timeState = Expired;
+					}
+					break;
 				case Delay:
-				if(timeExpired(randomDelay)) {
-					send(getCodeWord(RFADDRESS, RFCHANNEL, 1));
-					timeState = Warm;
-					resetTimer();
-				}
-				break;
+					if(timeExpired(randomDelay)) {
+						send(getCodeWord(RFADDRESS, RFCHANNEL, 1));
+						timeState = Warm;
+						resetTimer();
+					}
+					break;
 				case Wait:
-				if(timeExpired(TOTICKS(WAITTIME))) {
-					timeState = Delay;
-					resetTimer();
-				}
-				break;
+					if(timeExpired(TOTICKS(WAITTIME))) {
+						timeState = Delay;
+						resetTimer();
+					}
+					break;
 			}
 		#endif // DISABLE_TIMING
 	}
 }
 
-static inline void setOutput(const uint_fast8_t state)
+static void setOutput(const uint_fast8_t state)
 {
 	if(state == 0) {
 		PORTB &= ~(1 << PORTB0);
@@ -136,14 +134,14 @@ static inline void setOutput(const uint_fast8_t state)
 	}
 }
 
-static inline void initFilters(uint16_t *adcFilters)
+static void initFilters(uint16_t *adcFilters)
 {
 	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
 		adcFilters[cIdx] = adcRead(cIdx) << 6;
 	}
 }
 
-static inline void updateFilters(uint16_t *adcFilters)
+static void updateFilters(uint16_t *adcFilters)
 {
 	// Filter the ADC readings on both channels
 	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
@@ -153,21 +151,19 @@ static inline void updateFilters(uint16_t *adcFilters)
 	}
 }
 
-static inline uint_fast8_t tempInBand(const uint16_t *adcFilters)
-{
-	uint16_t temps[NCHAN];
-	
+static uint_fast8_t tempInBand(const uint16_t *adcFilters)
+{	
 	uint_fast8_t inBand = 1;
 	
 	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
-		temps[cIdx] = getTemperature((adcFilters[cIdx] + (1<<5)) >> 6);
+		uint16_t temp = getTemperature((adcFilters[cIdx] + (1<<5)) >> 6);
 		
 		const uint16_t lowerThresh = TL_TOFIXEDPOINT(TARGETTEMP) - (TL_TOFIXEDPOINT(TEMPBAND)>>1);
 		const uint16_t upperThresh = TL_TOFIXEDPOINT(TARGETTEMP) + (TL_TOFIXEDPOINT(TEMPBAND)>>1);
 		
-		if(temps[cIdx] < lowerThresh) {
+		if(temp < lowerThresh) {
 			inBand = 0;
-		} else if(temps[cIdx] > upperThresh) {
+		} else if(temp > upperThresh) {
 			inBand = 0;
 		}
 	}
@@ -191,7 +187,7 @@ static int16_t adcRead(const uint_fast8_t channel)
 	return adcResult;
 }
 
-static inline void initHW()
+static void initHW()
 {
 	// ZTX450 is on pin 5/PB0
 	// RF Tx on pin 6/PB1
@@ -207,7 +203,7 @@ static inline void initHW()
 	sei();
 }
 
-static inline void resetTimer()
+static void resetTimer()
 {
 	cli();
 		timerTick = 0;
@@ -216,13 +212,13 @@ static inline void resetTimer()
 
 static uint_fast8_t timeExpired(const uint_fast16_t tLimit)
 {
-	uint_fast16_t tVal;
+	uint_fast8_t expired;
 
 	cli();
-		tVal = timerTick;
+		expired = timerTick > tLimit;
 	sei();
 
-	return tVal > tLimit;
+	return expired;
 }
 
 ISR(TIM0_OVF_vect)

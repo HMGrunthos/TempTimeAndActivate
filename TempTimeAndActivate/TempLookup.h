@@ -45,8 +45,8 @@
 		adcVal -= TEMPLU_XMIN;
 		uint8_t cIdx = 0;
 		while(adcVal >= TEMPLU_DXINXSCALE) {
-			cIdx++;
 			adcVal -= TEMPLU_DXINXSCALE;
+			cIdx++;
 		}
 		
 		uint16_t yLow = pgm_read_word(tempLu_ADCTempLUT + cIdx);
