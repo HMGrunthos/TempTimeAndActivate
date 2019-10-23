@@ -22,17 +22,18 @@
 #define RFADDRESS 0
 #define RFCHANNEL 0
 
-#define TICKPERIOD 0.2184533333
+// #define TICKPERIOD 0.2184533333
+#define TICKPERIOD 0.25
 #define TOTICKS(period) ((uint_fast16_t)(period)/(float)TICKPERIOD + 0.5)
 	
-static void initHW();
+static void initHW(void);
 static void initFilters(uint16_t *adcFilters);
 static void updateFilters(uint16_t *adcFilters);
 static uint_fast8_t tempInBand(const uint16_t *adcFilters);
 static void setOutput(const uint_fast8_t state);
 static int16_t adcRead(const uint_fast8_t channel);
 static uint_fast8_t __attribute__ ((noinline)) timeExpired(const uint_fast16_t);
-static void resetTimer();
+static void resetTimer(void);
 
 volatile static uint_fast16_t timerTick;
 
@@ -60,9 +61,9 @@ int main(void)
 	initHW();
 
 	#ifndef DISABLE_TIMING
-		uint16_t randomDelay = getLastRandomNumber(); // 0 to 4 hours
-		randomDelay -= randomDelay >> 2; // 0 to 3 hours
-		// randomDelay = randomDelay >> 1; // 0 to 2 hours
+		uint16_t randomDelay = getLastRandomNumber(); // 0 to 4.5 hours
+		randomDelay -= randomDelay >> 2; // 0 to 3 hours 26 minutes
+		randomDelay = randomDelay >> 1; // 0 to 2 hours 16 minutes
 		// randomDelay = TOTICKS(10); // Ten seconds
 	#endif // DISABLE_TIMING
 
@@ -138,8 +139,11 @@ static void setOutput(const uint_fast8_t state)
 
 static void initFilters(uint16_t *adcFilters)
 {
-	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
-		adcFilters[cIdx] = adcRead(cIdx) << 6;
+	adcFilters[0] = adcFilters[1] = 0;
+	for(uint_fast8_t ii = 0; ii < 64; ii++) {
+		for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
+			adcFilters[cIdx] += adcRead(cIdx);
+		}
 	}
 }
 
@@ -189,7 +193,7 @@ static int16_t adcRead(const uint_fast8_t channel)
 	return adcResult;
 }
 
-static void initHW()
+static void initHW(void)
 {
 	// ZTX450 is on pin 5/PB0
 	// RF Tx on pin 6/PB1
@@ -199,13 +203,15 @@ static void initHW()
 	// ADC clock is CPUClock/8 or 150kHz at 1.2MHz
 	ADCSRA |= (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
 
-	TCCR0B = (1<<CS02) | (1<<CS00); // Divide input clock by 1024
-	TIMSK0 = (1<<TOIE0); // Enable interrupts, they tick at 4.577636719Hz
+	WDTCR = (1<<WDTIE) | (1<<WDP2); // Watchdog timer trips every 0.25 seconds
+
+	// TCCR0B = (1<<CS02) | (1<<CS00); // Divide input clock by 1024
+	// TIMSK0 = (1<<TOIE0); // Enable interrupts, they tick at 4.577636719Hz
 
 	sei();
 }
 
-static void resetTimer()
+static void resetTimer(void)
 {
 	cli();
 		timerTick = 0;
@@ -223,7 +229,8 @@ static uint_fast8_t timeExpired(const uint_fast16_t tLimit)
 	return expired;
 }
 
-ISR(TIM0_OVF_vect)
+// ISR(TIM0_OVF_vect)
+ISR(WDT_vect)
 {
 	timerTick++;
 }

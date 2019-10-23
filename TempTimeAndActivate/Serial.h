@@ -8,7 +8,7 @@
 #ifndef SERIAL_H_
 	#define SERIAL_H_
 
-	char uartGetc();
+	char uartGetc(void);
 	void uartPutc(char c);
 	void uartPuts(const char *s);
 	void uartPuts_P(const char *s);

@@ -36,6 +36,7 @@
 
 
 MCU = attiny13a
+MCUDUDE = t13
 FORMAT = ihex
 TARGET = BWM
 SRC = $(TARGET).c
@@ -134,7 +135,7 @@ AVRDUDE_WRITE_FUSES = -U lfuse:w:2a:m -U hfuse:w:fb:m -U efuse:w:ff:m
 # to submit bug reports.
 #AVRDUDE_VERBOSE = -v -v
 
-AVRDUDE_BASIC = -p $(MCU) -c $(AVRDUDE_PROGRAMMER)
+AVRDUDE_BASIC = -p $(MCUDUDE) -c $(AVRDUDE_PROGRAMMER)
 AVRDUDE_FLAGS = $(AVRDUDE_BASIC) $(AVRDUDE_NO_VERIFY) $(AVRDUDE_VERBOSE) $(AVRDUDE_ERASE_COUNTER)
 
 

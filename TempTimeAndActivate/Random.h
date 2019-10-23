@@ -11,7 +11,7 @@
 
 	static uint16_t _randomNumber;
 
-	static uint16_t lfsr16_next(uint16_t n)
+	static uint16_t lfsr16_next(const uint16_t n)
 	{
 		return (n >> 0x01U) ^ (-(n & 0x01U) & 0xB400U);
 	}
@@ -26,12 +26,12 @@
 		return _randomNumber;
 	}
 
-	static void random16InitFromSeed(uint16_t seed)
+	static void random16InitFromSeed(const uint16_t seed)
 	{
 		_randomNumber = seed;
 	}
 
-	static void random16InitFromEEPROM() // Make sure this is called before interrupts are enabled
+	static void random16InitFromEEPROM(void) // Make sure this is called before interrupts are enabled
 	{
 		// cli(); // See above
 		while(EECR & (1 << EEPE));
