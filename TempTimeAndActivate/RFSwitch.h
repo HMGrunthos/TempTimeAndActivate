@@ -51,9 +51,12 @@
 		_delay_loop_2(low);
 	}
 
-	#define SHORTPULSE 92
-	#define LONGPULSE 262
-	#define SYNCPULSE 2710
+	// #define SHORTPULSE 92
+	// #define LONGPULSE 262
+	// #define SYNCPULSE 2710
+	#define SHORTPULSE 816
+	#define LONGPULSE 2481
+	#define SYNCPULSE 25555
 	static void send(uint_fast16_t code)
 	{
 		for(uint_fast8_t nRepeat =	0; nRepeat < RFS_NREPEATTRANSMIT; nRepeat++) {

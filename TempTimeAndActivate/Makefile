@@ -59,7 +59,8 @@ DEBUG = stabs
 CSTANDARD = -std=gnu99
 
 # Place -D or -U options here
-CDEFS = -DF_CPU=1200000UL
+# CDEFS = -DF_CPU=1200000UL
+CDEFS = -DF_CPU=9600000UL
 
 # Place -I options here
 CINCS =
@@ -118,7 +119,7 @@ AVRDUDE_PORT =
 
 AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
 #AVRDUDE_WRITE_EEPROM = -U eeprom:w:$(TARGET).eep
-AVRDUDE_WRITE_FUSES = -U lfuse:w:2a:m -U hfuse:w:fb:m -U efuse:w:ff:m
+AVRDUDE_WRITE_FUSES = -U lfuse:w:0x3a:m -U hfuse:w:0xfb:m -U efuse:w:0xff:m
 
 
 # Uncomment the following if you want avrdude's erase cycle counter.
@@ -256,3 +257,23 @@ depend:
 	$(CC) -M -mmcu=$(MCU) $(CDEFS) $(CINCS) $(SRC) $(ASRC) >> $(MAKEFILE)
 
 .PHONY:	all build elf hex eep lss sym program coff extcoff clean depend
+# DO NOT DELETE THIS LINE -- make depend depends on it.
+BWM.o: BWM.c /home/sam/avr-gcc-9.2/avr/include/stdlib.h \
+ /home/sam/avr-gcc-9.2/lib/gcc/avr/9.2.0/include/stddef.h \
+ /home/sam/avr-gcc-9.2/avr/include/avr/io.h \
+ /home/sam/avr-gcc-9.2/avr/include/avr/sfr_defs.h \
+ /home/sam/avr-gcc-9.2/avr/include/inttypes.h \
+ /home/sam/avr-gcc-9.2/lib/gcc/avr/9.2.0/include/stdint.h \
+ /home/sam/avr-gcc-9.2/avr/include/stdint.h \
+ /home/sam/avr-gcc-9.2/avr/include/avr/iotn13a.h \
+ /home/sam/avr-gcc-9.2/avr/include/avr/portpins.h \
+ /home/sam/avr-gcc-9.2/avr/include/avr/common.h \
+ /home/sam/avr-gcc-9.2/avr/include/avr/version.h \
+ /home/sam/avr-gcc-9.2/avr/include/avr/fuse.h \
+ /home/sam/avr-gcc-9.2/avr/include/avr/lock.h \
+ /home/sam/avr-gcc-9.2/avr/include/avr/interrupt.h \
+ /home/sam/avr-gcc-9.2/avr/include/avr/sleep.h Serial.h TempLookup.h \
+ /home/sam/avr-gcc-9.2/avr/include/avr/pgmspace.h RFSwitch.h \
+ /home/sam/avr-gcc-9.2/avr/include/util/delay.h \
+ /home/sam/avr-gcc-9.2/avr/include/util/delay_basic.h \
+ /home/sam/avr-gcc-9.2/avr/include/math.h Random.h

@@ -47,7 +47,7 @@
 		random16();
 
 		while(EECR & (1 << EEPE));
-		EECR = (0<<EEPM1) | (0>>EEPM0);
+		EECR = (0<<EEPM1) | (0<<EEPM0);
 		EEDR = *((uint8_t*)&_randomNumber);
 		EECR |= (1<<EEMPE);
 		EECR |= (1<<EEPE);
