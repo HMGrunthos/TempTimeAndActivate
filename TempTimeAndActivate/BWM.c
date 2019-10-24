@@ -34,6 +34,7 @@ static void initHW(void);
 static void initFilters(uint16_t *adcFilters);
 static void updateFilters(uint16_t *adcFilters);
 static uint_fast8_t tempInBand(const uint16_t *adcFilters);
+static uint_fast8_t getPWMLevelFromEEPROM(void);
 static void setOutput(const uint_fast8_t level);
 static uint_fast8_t testInputActive(void);
 static int16_t adcRead(const uint_fast8_t channel);
@@ -41,7 +42,6 @@ static uint_fast8_t __attribute__ ((noinline)) timeExpired(const uint_fast16_t);
 static void resetTimer(void);
 
 volatile static uint_fast16_t timerTick = 0;
-static uint_fast8_t pwmLevel = 255;
 
 #define FIX_POINTER(_ptr) __asm__ __volatile__("" : "=b" (_ptr) : "0" (_ptr))
 
@@ -60,9 +60,11 @@ enum TimerMachineStates {
 
 int main(void)
 {
-	uint_fast8_t testLevel = 0;
+	uint_fast8_t pwmLevel;
 	
 	random16InitFromEEPROM(); // This is before the HW init because I don't want interrupts while I'm accessing the EEPROM
+
+	pwmLevel = getPWMLevelFromEEPROM();
 
 	initHW();
 
@@ -76,13 +78,13 @@ int main(void)
 	uint16_t adcFilters[NCHAN];
 	initFilters(adcFilters);
 
+	uint_fast8_t testLevel = 0;
+
 	enum TempMachineStates tempState = Sensing;
 	enum TimerMachineStates timeState = Wait;
 	while (1) {
 		if(testInputActive()) {
 			setOutput(testLevel++);
-			_delay_loop_2(65535);
-			continue;
 		}
 
 		switch(tempState) {
@@ -105,7 +107,7 @@ int main(void)
 				break;
 			case Sensing:
 				#ifndef WARMOUT
-					setOutput(0);
+					// setOutput(0);
 				#endif // WARMOUT
 				updateFilters(adcFilters);
 				if(tempInBand(adcFilters)) {
@@ -150,7 +152,21 @@ int main(void)
 					break;
 			}
 		#endif // DISABLE_TIMING
+
+		_delay_ms(20);
 	}
+}
+
+static uint_fast8_t getPWMLevelFromEEPROM(void)
+{
+	uint_fast8_t level;
+
+	while(EECR & (1 << EEPE));
+	EEARL = 2;
+	EECR |= (1<<EERE);
+	level = EEDR;
+
+	return level;
 }
 
 static void setOutput(const uint_fast8_t level)
@@ -173,12 +189,15 @@ static uint_fast8_t testInputActive(void)
 
 static void initFilters(uint16_t *adcFilters)
 {
-	adcFilters[0] = adcFilters[1] = 0;
+	// adcFilters[0] = adcFilters[1] = 0;
+	adcFilters[0] = adcFilters[1] = (1<<5);
 	for(uint_fast8_t ii = 0; ii < 64; ii++) {
 		for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
 			adcFilters[cIdx] += adcRead(cIdx);
 		}
 	}
+//	adcFilters[0] = adcRead(0) << 6;
+//	adcFilters[1] = adcRead(1) << 6;
 }
 
 static void updateFilters(uint16_t *adcFilters)
@@ -186,7 +205,8 @@ static void updateFilters(uint16_t *adcFilters)
 	// Filter the ADC readings on both channels
 	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
 		// filter = filter*(63/64) + filter*(1/64)
-		adcFilters[cIdx] -= (adcFilters[cIdx] + (1<<5)) >> 6; // Remove one 64th from the accumulator
+		// adcFilters[cIdx] -= (adcFilters[cIdx] + (1<<5)) >> 6; // Remove one 64th from the accumulator
+		adcFilters[cIdx] -= adcFilters[cIdx] >> 6; // Remove one 64th from the accumulator
 		adcFilters[cIdx] += adcRead(cIdx); // Add one 64th of new measurement
 	}
 }
@@ -198,7 +218,8 @@ static uint_fast8_t tempInBand(const uint16_t *adcFilters)
 
    uint_fast8_t inBand = 1;
    for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
-      uint16_t temp = getTemperature((adcFilters[cIdx] + (1<<5)) >> 6);
+      // uint16_t temp = getTemperature((adcFilters[cIdx] + (1<<5)) >> 6);
+      uint16_t temp = getTemperature(adcFilters[cIdx] >> 6);
 
       if(temp < lowerThresh) {
          inBand = 0;
