@@ -39,7 +39,7 @@ MCU = attiny13a
 MCUDUDE = t13
 FORMAT = ihex
 TARGET = BWM
-SRC = $(TARGET).c
+SRC = $(TARGET).c # Serial.c
 ASRC =
 OPT = s
 
@@ -61,6 +61,7 @@ CSTANDARD = -std=gnu99
 # Place -D or -U options here
 # CDEFS = -DF_CPU=1200000UL
 CDEFS = -DF_CPU=9600000UL
+# CDEFS = -DF_CPU=1200000UL
 
 # Place -I options here
 CINCS =

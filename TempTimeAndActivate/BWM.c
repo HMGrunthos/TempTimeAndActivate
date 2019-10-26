@@ -31,13 +31,14 @@
 #define TOTICKS(period) ((uint_fast16_t)(period)/(float)TICKPERIOD + 0.5)
 	
 static void initHW(void);
+static int16_t adcRead(const uint_fast8_t channel);
 static void initFilters(uint16_t *adcFilters);
 static void updateFilters(uint16_t *adcFilters);
 static uint_fast8_t tempInBand(const uint16_t *adcFilters);
 static uint_fast8_t getPWMLevelFromEEPROM(void);
+static void setPWMLevelInEEPROM(uint_fast8_t level);
 static void setOutput(const uint_fast8_t level);
-static uint_fast8_t testInputActive(void);
-static int16_t adcRead(const uint_fast8_t channel);
+static uint_fast8_t getTestBit(void);
 static uint_fast8_t __attribute__ ((noinline)) timeExpired(const uint_fast16_t);
 static void resetTimer(void);
 
@@ -60,11 +61,9 @@ enum TimerMachineStates {
 
 int main(void)
 {
-	uint_fast8_t pwmLevel;
-	
 	random16InitFromEEPROM(); // This is before the HW init because I don't want interrupts while I'm accessing the EEPROM
 
-	pwmLevel = getPWMLevelFromEEPROM();
+	uint_fast8_t pwmLevel = getPWMLevelFromEEPROM(); // Same... assumes interrupts are off
 
 	initHW();
 
@@ -78,24 +77,41 @@ int main(void)
 	uint16_t adcFilters[NCHAN];
 	initFilters(adcFilters);
 
-	uint_fast8_t testLevel = 0;
-
+	uint_fast8_t testCounter;
+	uint_fast8_t testLevel = pwmLevel;
 	enum TempMachineStates tempState = Sensing;
 	enum TimerMachineStates timeState = Wait;
 	while (1) {
-		if(testInputActive()) {
-			setOutput(testLevel++);
+		sleep_enable(); // This regulates the loop rate to about 64Hz
+		sleep_cpu();
+
+		// This block defines the test and configuration behaviour
+		uint_fast8_t testBit = getTestBit();
+		if(testBit == 0) { // If the input is as active then...
+			if(testCounter < 0xFF) { // Count down until the configuration duration (i.e. hold the button down to enter configuration)
+				testCounter++;
+			} else {
+				testLevel++;
+			}
+			setOutput(testLevel);
+		} else {
+			if(testCounter > 0) {
+				testCounter--;
+			} else {
+				if(pwmLevel != testLevel) {
+					// Set EEPROM
+					setPWMLevelInEEPROM(testLevel);
+				}
+			}
 		}
 
+		// This state machine controls the activation of the output based on the temperature window
 		switch(tempState) {
 			case Inhibit:
 				#ifndef WARMOUT
 					setOutput(0);
 				#endif // WARMOUT
-				set_sleep_mode(SLEEP_MODE_PWR_DOWN); // Now go to sleep
-				cli();
-				sleep_enable();
-				sleep_cpu();
+				cli(); // This will cause the processor to sleep with no way of waking
 				break;
 			case Active:
 				#ifndef WARMOUT
@@ -107,7 +123,7 @@ int main(void)
 				break;
 			case Sensing:
 				#ifndef WARMOUT
-					// setOutput(0);
+					// setOutput(0); // The system starts in the state - it will be overridden by the test functions, power cycling will reset this state
 				#endif // WARMOUT
 				updateFilters(adcFilters);
 				if(tempInBand(adcFilters)) {
@@ -120,7 +136,8 @@ int main(void)
 				}
 				break;
 		}
-		
+
+		// This state machine controls the random delay before the heating/cooling cycle starts
 		#ifndef DISABLE_TIMING
 			switch(timeState) {
 				case Expired:
@@ -152,8 +169,6 @@ int main(void)
 					break;
 			}
 		#endif // DISABLE_TIMING
-
-		_delay_ms(20);
 	}
 }
 
@@ -169,6 +184,17 @@ static uint_fast8_t getPWMLevelFromEEPROM(void)
 	return level;
 }
 
+static void setPWMLevelInEEPROM(uint_fast8_t level)
+{
+	cli();
+		while(EECR & (1<<EEPE));
+		EEARL = 2;
+		EEDR = level;
+		EECR |= (1<<EEMPE);
+		EECR |= (1<<EEPE);
+	sei();
+}
+
 static void setOutput(const uint_fast8_t level)
 {
 	#ifdef NOPWM
@@ -182,22 +208,23 @@ static void setOutput(const uint_fast8_t level)
 	#endif // NOPWM
 }
 
-static uint_fast8_t testInputActive(void)
+static uint_fast8_t getTestBit(void)
 {
-	return (PINB & (1<<PINB1)) == 0;
+	return PINB & (1<<PINB1);
 }
 
 static void initFilters(uint16_t *adcFilters)
 {
 	// adcFilters[0] = adcFilters[1] = 0;
-	adcFilters[0] = adcFilters[1] = (1<<5);
-	for(uint_fast8_t ii = 0; ii < 64; ii++) {
+	// adcFilters[0] = adcFilters[1] = (1<<5);
+	adcFilters[0] = adcFilters[1] = (1<<4);
+	for(uint_fast8_t ii = 0; ii < (1<<5); ii++) {
 		for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
 			adcFilters[cIdx] += adcRead(cIdx);
 		}
 	}
-//	adcFilters[0] = adcRead(0) << 6;
-//	adcFilters[1] = adcRead(1) << 6;
+//	adcFilters[0] = adcRead(0) << 5;
+//	adcFilters[1] = adcRead(1) << 5;
 }
 
 static void updateFilters(uint16_t *adcFilters)
@@ -206,7 +233,8 @@ static void updateFilters(uint16_t *adcFilters)
 	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
 		// filter = filter*(63/64) + filter*(1/64)
 		// adcFilters[cIdx] -= (adcFilters[cIdx] + (1<<5)) >> 6; // Remove one 64th from the accumulator
-		adcFilters[cIdx] -= adcFilters[cIdx] >> 6; // Remove one 64th from the accumulator
+		// adcFilters[cIdx] -= adcFilters[cIdx] >> 6; // Remove one 64th from the accumulator
+		adcFilters[cIdx] -= adcFilters[cIdx] >> 5; // Remove one 64th from the accumulator
 		adcFilters[cIdx] += adcRead(cIdx); // Add one 64th of new measurement
 	}
 }
@@ -219,7 +247,8 @@ static uint_fast8_t tempInBand(const uint16_t *adcFilters)
    uint_fast8_t inBand = 1;
    for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
       // uint16_t temp = getTemperature((adcFilters[cIdx] + (1<<5)) >> 6);
-      uint16_t temp = getTemperature(adcFilters[cIdx] >> 6);
+      // uint16_t temp = getTemperature(adcFilters[cIdx] >> 6);
+      uint16_t temp = getTemperature(adcFilters[cIdx] >> 5);
 
       if(temp < lowerThresh) {
          inBand = 0;
@@ -242,7 +271,7 @@ static int16_t adcRead(const uint_fast8_t channel)
 	ADCSRA |= (1 << ADSC); // Start the conversion
 	while(ADCSRA & (1 << ADSC)); // Wait for conversion to complete
 
-	int16_t adcResult = ADC; // 10-bit resolution
+	int16_t adcResult = ADC; // 10-bit resolution (both bytes)
 
 	return adcResult;
 }
@@ -251,10 +280,10 @@ static void initHW(void)
 {
 	// ZTX450 is on pin 5/PB0
 	// RF Tx on pin 6/PB1
-	PORTB &= ~(1 << PORTB2) & ~(1 << PORTB0);
+	// PORTB &= ~(1 << PORTB2) & ~(1 << PORTB0); // This register starts at zero anyway so is commented out
 	DDRB |= (1 << DDB2) | (1 << DDB0); // Set it as an output
 	#ifdef PB4ASOUTPUT
-		PORTB &= ~(1 << PORTB4); // In case we want to use PB4 as an output debugging pin
+		// PORTB &= ~(1 << PORTB4); // In case we want to use PB4 as an output debugging pin, again commented out as starts at zero
 		DDRB |= (1 << DDB4); // In case we want to use PB4 as an output debugging pin
 	#endif
 
@@ -269,7 +298,8 @@ static void initHW(void)
 		ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
 	#endif
 
-	WDTCR = (1 << WDTIE) | (1 << WDP2); // Watchdog timer trips every 0.25 seconds-ish
+	// WDTCR = (1 << WDTIE) | (1 << WDP2); // Watchdog timer trips every 0.25 seconds-ish
+	WDTCR = (1 << WDTIE); // Watchdog timer trips every 16ms-ish
 
 	#ifndef NOPWM
 		TCCR0A = (1<<COM0A1) | (0<<COM0A0) | (1 << WGM00); // PWM(Phase Correct)
@@ -299,11 +329,9 @@ static uint_fast8_t timeExpired(const uint_fast16_t tLimit)
 
 ISR(WDT_vect)
 {
-	timerTick++;
+	static uint_fast8_t divWDT;
+	divWDT++;
+	if((divWDT & 0x0F) == 0) { // Divide the 64Hz ish by 16 to give a period close to 0.25s (4Hz)
+		timerTick++;
+	}
 }
-
-/*
-ISR(TIM0_OVF_vect)
-{
-}
-*/
