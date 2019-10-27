@@ -101,6 +101,8 @@ int main(void)
 				if(pwmLevel != testLevel) {
 					// Set EEPROM
 					setPWMLevelInEEPROM(testLevel);
+					
+					
 				}
 			}
 		}
