@@ -38,7 +38,7 @@ static uint_fast8_t tempInBand(const uint16_t *adcFilters);
 static uint_fast8_t getPWMLevelFromEEPROM(void);
 static void setPWMLevelInEEPROM(uint_fast8_t level);
 static void setOutput(const uint_fast8_t level);
-static uint_fast8_t getTestBit(void);
+static uint_fast8_t testButtonPressed(void);
 static uint_fast8_t __attribute__ ((noinline)) timeExpired(const uint_fast16_t);
 static void resetTimer(void);
 
@@ -69,7 +69,8 @@ int main(void)
 
 	#ifndef DISABLE_TIMING
 		uint_fast16_t randomDelay = getLastRandomNumber(); // 0 to 5 hours 13 minutes
-		randomDelay -= randomDelay >> 2; // 0 to 3 hours 54 minutes
+		// randomDelay -= randomDelay >> 2; // 0 to 3 hours 54 minutes
+		randomDelay = randomDelay - (randomDelay >> 2) - (randomDelay >> 3); // 0 to 3 hours 15 minutes
 		// randomDelay = randomDelay >> 1; // 0 to 2 hours 17 minutes
 		// randomDelay = TOTICKS(8); // Eight seconds
 	#endif // DISABLE_TIMING
@@ -86,8 +87,7 @@ int main(void)
 		sleep_cpu();
 
 		// This block defines the test and configuration behaviour
-		uint_fast8_t testBit = getTestBit();
-		if(testBit == 0) { // If the input is as active then...
+		if(testButtonPressed()) { // If the input is as active then...
 			if(testCounter < 0xFF) { // Count down until the configuration duration (i.e. hold the button down to enter configuration)
 				testCounter++;
 			} else {
@@ -210,32 +210,26 @@ static void setOutput(const uint_fast8_t level)
 	#endif // NOPWM
 }
 
-static uint_fast8_t getTestBit(void)
+static uint_fast8_t testButtonPressed(void)
 {
-	return PINB & (1<<PINB1);
+	return (PINB & (1<<PINB1)) == 0;
 }
 
 static void initFilters(uint16_t *adcFilters)
 {
-	// adcFilters[0] = adcFilters[1] = 0;
-	// adcFilters[0] = adcFilters[1] = (1<<5);
 	adcFilters[0] = adcFilters[1] = (1<<4);
 	for(uint_fast8_t ii = 0; ii < (1<<5); ii++) {
 		for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
 			adcFilters[cIdx] += adcRead(cIdx);
 		}
 	}
-//	adcFilters[0] = adcRead(0) << 5;
-//	adcFilters[1] = adcRead(1) << 5;
 }
 
 static void updateFilters(uint16_t *adcFilters)
 {
 	// Filter the ADC readings on both channels
 	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
-		// filter = filter*(63/64) + filter*(1/64)
-		// adcFilters[cIdx] -= (adcFilters[cIdx] + (1<<5)) >> 6; // Remove one 64th from the accumulator
-		// adcFilters[cIdx] -= adcFilters[cIdx] >> 6; // Remove one 64th from the accumulator
+		// filter = filter*(31/32) + filter*(1/32)
 		adcFilters[cIdx] -= adcFilters[cIdx] >> 5; // Remove one 64th from the accumulator
 		adcFilters[cIdx] += adcRead(cIdx); // Add one 64th of new measurement
 	}
@@ -248,8 +242,6 @@ static uint_fast8_t tempInBand(const uint16_t *adcFilters)
 
    uint_fast8_t inBand = 1;
    for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
-      // uint16_t temp = getTemperature((adcFilters[cIdx] + (1<<5)) >> 6);
-      // uint16_t temp = getTemperature(adcFilters[cIdx] >> 6);
       uint16_t temp = getTemperature(adcFilters[cIdx] >> 5);
 
       if(temp < lowerThresh) {
