@@ -77,7 +77,7 @@ int main(void)
 	uint16_t adcFilters[NCHAN];
 	initFilters(adcFilters);
 
-	uint_fast8_t testCounter;
+	uint_fast8_t testCounter = 0;
 	uint_fast8_t testLevel = pwmLevel;
 	enum TempMachineStates tempState = Sensing;
 	enum TimerMachineStates timeState = Wait;
@@ -101,8 +101,8 @@ int main(void)
 				if(pwmLevel != testLevel) {
 					// Set EEPROM
 					setPWMLevelInEEPROM(testLevel);
-					
-					
+					pwmLevel = testLevel;
+					setOutput(0);
 				}
 			}
 		}
