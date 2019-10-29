@@ -14,7 +14,7 @@
 // #define PB4ASOUTPUT
 // #define WARMOUT
 
-#define ONTIME 50 // In seconds
+#define ONTIME 60 // In seconds
 #define TARGETTEMP 41 // Target temperature
 #define TEMPBAND 2 // Allowed slop
 #define NCHAN 2 // Number of temperature channels to monitor
