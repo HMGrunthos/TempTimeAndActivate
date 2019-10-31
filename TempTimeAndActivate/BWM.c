@@ -297,7 +297,7 @@ static void initHW(void)
 
 	#ifndef NOPWM
 		TCCR0A = (1<<COM0A1) | (0<<COM0A0) | (1 << WGM00); // PWM(Phase Correct)
-		TCCR0B = (1 << CS00); // Divide input clock by 1024
+		TCCR0B = (1 << CS00); // Divide input clock by 1 (i.e. no divide)
 	#endif
 
 	sei();
