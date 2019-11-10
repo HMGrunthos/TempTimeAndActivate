@@ -17,7 +17,7 @@
 	#define TEMPLU_DXINXSCALE 32
 	#define TEMPLU_DXINXSCALE_ASPOWER 5
 	#define TEMPLU_YSCALEPOWER 10
-	#define TEMPLU_GRADSCALEPWR 5
+	#define TEMPLU_GRADSCALEPWR 3
 	#define TEMPLU_TABLESIZE 16
 	static const uint16_t tempLu_ADCTempLUT[TEMPLU_TABLESIZE] PROGMEM = {50451, 46007, 41984, 38283, 34832, 31576, 28473, 25488, 22591, 19757, 16961, 14181, 11395, 8579, 5705, 2743};
 
@@ -27,8 +27,8 @@
 		static const char tempLu_FracChar[4][3] PROGMEM = {"00", "25", "50", "75"};
 	#endif
 	
-	static uint16_t __attribute__ ((noinline)) getTemperature(uint16_t adcVal)
-	// static uint16_t getTemperature(uint16_t adcVal)
+	// static const uint16_t __attribute__ ((noinline)) getTemperature(uint16_t adcVal)
+	static inline const uint16_t __attribute__((always_inline)) getTemperature(uint16_t adcVal)
 	{
 		#ifdef PRINTTEMP
 			char buff[10];
@@ -51,13 +51,22 @@
 		
 		uint16_t yLow = pgm_read_word(tempLu_ADCTempLUT + cIdx);
 		uint16_t yHigh = pgm_read_word(tempLu_ADCTempLUT + cIdx + 1);
-		uint16_t grad = (yLow - yHigh) << (TEMPLU_GRADSCALEPWR - TEMPLU_DXINXSCALE_ASPOWER); // Gradient
-		uint16_t offSet = ((grad*adcVal) + (1<<(TEMPLU_YSCALEPOWER - TEMPLU_GRADSCALEPWR - 1))) >> (TEMPLU_YSCALEPOWER - TEMPLU_GRADSCALEPWR); // Offset from yLow and rounded
+		uint16_t grad = (yLow - yHigh + (1<<(TEMPLU_DXINXSCALE_ASPOWER - TEMPLU_GRADSCALEPWR - 1))) >> (TEMPLU_DXINXSCALE_ASPOWER - TEMPLU_GRADSCALEPWR); // Gradient
+		uint16_t offSet = ((grad*adcVal) + (1<<(TEMPLU_GRADSCALEPWR - 1))) >> TEMPLU_GRADSCALEPWR; // Offset from yLow and rounded
 		uint16_t temp = yLow - offSet; // Temperature
 
 		#ifdef PRINTTEMP
 			uint16_t tempRndF = temp + (1<<(TEMPLU_YSCALEPOWER - 3)); // Temperature rounded for display
 
+			uartPuts_P(PSTR(", "));
+			utoa(cIdx, buff, 10);
+			uartPuts(buff);
+			uartPuts_P(PSTR(", "));
+			utoa(adcVal, buff, 10);
+			uartPuts(buff);
+			uartPuts_P(PSTR(", "));
+			utoa(grad, buff, 10);
+			uartPuts(buff);
 			uartPuts_P(PSTR(", "));
 			utoa(temp, buff, 10);
 			uartPuts(buff);
