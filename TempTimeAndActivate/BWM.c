@@ -272,12 +272,10 @@ static const uint_fast8_t tempInBand(uint16_t *adcFilters)
 	const uint16_t lowerThresh = TL_TOFIXEDPOINT(TARGETTEMP) - (TL_TOFIXEDPOINT(TEMPBAND)>>1);
 	const uint16_t upperThresh = TL_TOFIXEDPOINT(TARGETTEMP) + (TL_TOFIXEDPOINT(TEMPBAND)>>1);
 
-	uint16_t *cFilter = adcFilters;
    for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
-		*cFilter -= (*cFilter + (1<<4)) >> 5; // Remove one 1/32 of old data from the temperature accumulator
-		*cFilter += adcRead(cIdx); // Add one 1/32 of new measurement
-      uint16_t temp = getTemperature((*cFilter + (1<<4)) >> 5); // Get the filtered temperature
-		cFilter++; // Next channel
+		adcFilters[cIdx] -= (adcFilters[cIdx] + (1<<4)) >> 5; // Remove one 1/32 of old data from the temperature accumulator
+		adcFilters[cIdx] += adcRead(cIdx); // Add one 1/32 of new measurement
+      uint16_t temp = getTemperature((adcFilters[cIdx] + (1<<4)) >> 5); // Get the filtered temperature
 
 		// If the temperature exceeds either the top or bottom theshold on either sensor then we're out of bounds
       if(temp < lowerThresh) {
