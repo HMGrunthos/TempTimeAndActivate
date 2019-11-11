@@ -14,13 +14,13 @@
 // #define PB4ASOUTPUT
 // #define WARMOUT
 
-#define ONTIME 60 // In seconds
+#define ONTIME 50 // In seconds
 #define TARGETTEMP 41 // Target temperature
 #define TEMPBAND 2 // Allowed slop
 #define NCHAN 2 // Number of temperature channels to monitor
 
 #define WAITTIME 7200 // Two hours
-// #define WAITTIME 2 // Two seconds
+// #define WAITTIME 8 // Two seconds
 #define WARMTIME 1800 // Thirty minutes
 // #define WARMTIME 20 // Twenty seconds
 
@@ -31,15 +31,17 @@
 #define TOTICKS(period) ((uint_fast16_t)(period)/(float)TICKPERIOD + 0.5)
 	
 static void initHW(void);
-static int16_t adcRead(const uint_fast8_t channel);
+static const int16_t adcRead(const uint_fast8_t channel);
 static void initFilters(uint16_t *adcFilters);
-static void updateFilters(uint16_t *adcFilters);
-static uint_fast8_t tempInBand(const uint16_t *adcFilters);
+static const uint_fast8_t tempInBand(uint16_t *adcFilters);
 static uint_fast8_t getPWMLevelFromEEPROM(void);
-static void setPWMLevelInEEPROM(uint_fast8_t level);
+static void setPWMLevelInEEPROM(const uint_fast8_t level);
 static void setOutput(const uint_fast8_t level);
-static uint_fast8_t testButtonPressed(void);
-static uint_fast8_t __attribute__ ((noinline)) timeExpired(const uint_fast16_t);
+static inline void toggleActiveIndicator(void);
+static inline void clearActiveIndicator(void);
+static inline void setActiveIndicator(void);
+static const uint_fast8_t testButtonPressed(void);
+static const uint_fast8_t __attribute__ ((noinline)) timeExpired(const uint_fast16_t);
 static void resetTimer(void);
 
 volatile static uint_fast16_t timerTick = 0;
@@ -70,8 +72,8 @@ int main(void)
 	#ifndef DISABLE_TIMING
 		uint_fast16_t randomDelay = getLastRandomNumber(); // 0 to 5 hours 13 minutes
 		// randomDelay -= randomDelay >> 2; // 0 to 3 hours 54 minutes
-		randomDelay = randomDelay - (randomDelay >> 2) - (randomDelay >> 3); // 0 to 3 hours 15 minutes
-		// randomDelay = randomDelay >> 1; // 0 to 2 hours 17 minutes
+		randomDelay = 5*(randomDelay >> 3); // 0 to 3 hours 15 minutes
+		// randomDelay = randomDelay >> 1; // 0 to 2 hours 36 minutes
 		// randomDelay = TOTICKS(8); // Eight seconds
 	#endif // DISABLE_TIMING
 
@@ -127,7 +129,6 @@ int main(void)
 				#ifndef WARMOUT
 					// setOutput(0); // The system starts in the state - it will be overridden by the test functions, power cycling will reset this state
 				#endif // WARMOUT
-				updateFilters(adcFilters);
 				if(tempInBand(adcFilters)) {
 					resetTimer();
 					#ifndef DISABLE_TIMING
@@ -141,13 +142,16 @@ int main(void)
 
 		// This state machine controls the random delay before the heating/cooling cycle starts
 		#ifndef DISABLE_TIMING
+			uint_fast8_t activeMask; // This mask controls the toggling of the power/status LED
 			switch(timeState) {
 				case Expired:
+					activeMask = 0x20;
 					#ifdef WARMOUT
 						setOutput(0);
 					#endif // WARMOUT
 					break;
 				case Warm:
+					activeMask = 0x01;
 					#ifdef WARMOUT
 						setOutput(pwmLevel);
 					#endif // WARMOUT
@@ -157,6 +161,7 @@ int main(void)
 					}
 					break;
 				case Delay:
+					activeMask = 0x04;
 					if(timeExpired(randomDelay)) {
 						resetTimer();
 						send(getCodeWord(RFADDRESS, RFCHANNEL, 1));
@@ -164,11 +169,28 @@ int main(void)
 					}
 					break;
 				case Wait:
+					activeMask = 0x04;
 					if(timeExpired(TOTICKS(WAITTIME))) {
 						resetTimer();
 						timeState = Delay;
 					}
 					break;
+			}
+
+			// Get the latest timer value so we can use it to toggle the power LED
+			uint_fast16_t lastTickValue;
+			cli();
+				lastTickValue = timerTick;
+			sei();
+
+			if(tempState == Inhibit) { // Power LED also indicates state
+				setActiveIndicator();
+			} else {
+				if(lastTickValue & activeMask) {
+					clearActiveIndicator();
+				} else {
+					toggleActiveIndicator();
+				}
 			}
 		#endif // DISABLE_TIMING
 	}
@@ -186,7 +208,7 @@ static uint_fast8_t getPWMLevelFromEEPROM(void)
 	return level;
 }
 
-static void setPWMLevelInEEPROM(uint_fast8_t level)
+static void setPWMLevelInEEPROM(const uint_fast8_t level)
 {
 	cli();
 		while(EECR & (1<<EEPE));
@@ -210,14 +232,34 @@ static void setOutput(const uint_fast8_t level)
 	#endif // NOPWM
 }
 
-static uint_fast8_t testButtonPressed(void)
+static void toggleActiveIndicator(void)
+{
+	PINB |= (1 << PINB5);
+	// PINB |= (1 << PINB4);
+}
+
+static void clearActiveIndicator(void)
+{
+	PORTB &= ~(1 << PORTB5);
+	// PORTB &= ~(1 << PORTB4);
+}
+
+static void setActiveIndicator(void)
+{
+	PORTB |= (1 << PORTB5);
+	// PORTB |= (1 << PORTB4);
+}
+
+static const uint_fast8_t testButtonPressed(void)
 {
 	return (PINB & (1<<PINB1)) == 0;
 }
 
 static void initFilters(uint16_t *adcFilters)
 {
-	adcFilters[0] = adcFilters[1] = (1<<4);
+	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
+		adcFilters[cIdx] = 0;
+	}
 	for(uint_fast8_t ii = 0; ii < (1<<5); ii++) {
 		for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
 			adcFilters[cIdx] += adcRead(cIdx);
@@ -225,41 +267,35 @@ static void initFilters(uint16_t *adcFilters)
 	}
 }
 
-static void updateFilters(uint16_t *adcFilters)
-{
-	// Filter the ADC readings on both channels
-	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
-		// filter = filter*(31/32) + filter*(1/32)
-		adcFilters[cIdx] -= adcFilters[cIdx] >> 5; // Remove one 64th from the accumulator
-		adcFilters[cIdx] += adcRead(cIdx); // Add one 64th of new measurement
-	}
-}
-
-static uint_fast8_t tempInBand(const uint16_t *adcFilters)
+static const uint_fast8_t tempInBand(uint16_t *adcFilters)
 {
 	const uint16_t lowerThresh = TL_TOFIXEDPOINT(TARGETTEMP) - (TL_TOFIXEDPOINT(TEMPBAND)>>1);
 	const uint16_t upperThresh = TL_TOFIXEDPOINT(TARGETTEMP) + (TL_TOFIXEDPOINT(TEMPBAND)>>1);
 
-   uint_fast8_t inBand = 1;
+	uint16_t *cFilter = adcFilters;
    for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
-      uint16_t temp = getTemperature(adcFilters[cIdx] >> 5);
+		*cFilter -= (*cFilter + (1<<4)) >> 5; // Remove one 1/32 of old data from the temperature accumulator
+		*cFilter += adcRead(cIdx); // Add one 1/32 of new measurement
+      uint16_t temp = getTemperature((*cFilter + (1<<4)) >> 5); // Get the filtered temperature
+		cFilter++; // Next channel
 
+		// If the temperature exceeds either the top or bottom theshold on either sensor then we're out of bounds
       if(temp < lowerThresh) {
-         inBand = 0;
+         return 0;
       } else if(temp > upperThresh) {
-         inBand = 0;
+         return 0;
       }
    }
 
-   return inBand;
+   return 1; // Only if we get here is everything within the bounds
 }
 
-static int16_t adcRead(const uint_fast8_t channel)
+static const int16_t adcRead(const uint_fast8_t channel)
 {
 	if(channel == 0) {
-		ADMUX = (1 << MUX1) | (0 << MUX0); // ADC2 (lower port)
-	} else {
 		ADMUX = (1 << MUX1) | (1 << MUX0); // ADC3 (upper port)
+	} else {
+		ADMUX = (1 << MUX1) | (0 << MUX0); // ADC2 (lower port)
 	}
 	
 	ADCSRA |= (1 << ADSC); // Start the conversion
@@ -273,11 +309,13 @@ static int16_t adcRead(const uint_fast8_t channel)
 static void initHW(void)
 {
 	// ZTX450 is on pin 5/PB0
-	// RF Tx on pin 6/PB1
-	// PORTB &= ~(1 << PORTB2) & ~(1 << PORTB0); // This register starts at zero anyway so is commented out
-	DDRB |= (1 << DDB2) | (1 << DDB0); // Set it as an output
+	// RF Tx on pin 6/PB2
+	// Active LED on pin PB5
+	// Test/Config button on PB1
+	PORTB |= (1 << PORTB5); // This sets the active LED (on the reset pin)
+	//PORTB |= (1 << PORTB4); // This sets the active LED (on the test pin)
+	DDRB |= (1 << DDB5) | (1 << DDB2) | (1 << DDB0); // Three pins as outputs
 	#ifdef PB4ASOUTPUT
-		// PORTB &= ~(1 << PORTB4); // In case we want to use PB4 as an output debugging pin, again commented out as starts at zero
 		DDRB |= (1 << DDB4); // In case we want to use PB4 as an output debugging pin
 	#endif
 
@@ -292,7 +330,6 @@ static void initHW(void)
 		ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
 	#endif
 
-	// WDTCR = (1 << WDTIE) | (1 << WDP2); // Watchdog timer trips every 0.25 seconds-ish
 	WDTCR = (1 << WDTIE); // Watchdog timer trips every 16ms-ish
 
 	#ifndef NOPWM
@@ -310,7 +347,7 @@ static void resetTimer(void)
 	sei();
 }
 
-static uint_fast8_t timeExpired(const uint_fast16_t tLimit)
+static const uint_fast8_t timeExpired(const uint_fast16_t tLimit)
 {
 	uint_fast8_t expired;
 
