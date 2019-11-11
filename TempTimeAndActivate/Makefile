@@ -115,7 +115,7 @@ LDFLAGS = $(EXTMEMOPTS) $(LDMAP) $(PRINTF_LIB) $(SCANF_LIB) $(MATH_LIB)
 # Programming support using avrdude. Settings and variables.
 
 AVRDUDE_PROGRAMMER = atmelice_isp
-AVRDUDE_PORT = 
+AVRDUDE_PORT =
 
 AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
 #AVRDUDE_WRITE_EEPROM = -U eeprom:w:$(TARGET).eep
@@ -132,7 +132,7 @@ AVRDUDE_WRITE_FUSES = -U lfuse:w:0x3a:m -U hfuse:w:0xfb:m # 9.6MHz no divider
 # performed after programming the device.
 #AVRDUDE_NO_VERIFY = -V
 
-# Increase verbosity level.  Please use this when submitting bug
+# Increase verbosity level. Please use this when submitting bug
 # reports about avrdude. See <http://savannah.nongnu.org/projects/avrdude>
 # to submit bug reports.
 #AVRDUDE_VERBOSE = -v -v

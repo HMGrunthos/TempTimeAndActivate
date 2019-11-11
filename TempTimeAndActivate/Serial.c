@@ -2,8 +2,8 @@
  * Serial.c
  *
  * Created: 19/10/2019 11:20:01
- *  Author: Sam
- */ 
+ * Author: Sam
+ */
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -16,15 +16,15 @@
 
 #if defined(UART_TX_ENABLED) && !defined(UART_TX)
 	#define UART_TX PORTB4 // Use PB4 as TX pin
-#endif  /* !UART_TX */
+#endif /* !UART_TX */
 
 #if defined(UART_RX_ENABLED) && !defined(UART_RX)
 	#define UART_RX PORTB3 // Use PB3 as RX pin
-#endif  /* !UART_RX */
+#endif /* !UART_RX */
 
 #if (defined(UART_TX_ENABLED) || defined(UART_RX_ENABLED)) && !defined(UART_BAUDRATE)
 	#define UART_BAUDRATE (9600)
-#endif  /* !UART_BAUDRATE */
+#endif /* !UART_BAUDRATE */
 
 #if defined(UART_RX_ENABLED) || defined(UART_TX_ENABLED)
 	#define TXDELAY (int)(((F_CPU/UART_BAUDRATE)-7 +1.5)/3)

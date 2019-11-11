@@ -2,14 +2,14 @@
  * TempLookup.h
  *
  * Created: 19/10/2019 11:31:03
- *  Author: Sam
- */ 
+ * Author: Sam
+ */
 
 #ifndef TEMPLOOKUP_H_
 	#define TEMPLOOKUP_H_
-	
+
 	#include <avr/pgmspace.h>
-	
+
 	// #define PRINTTEMP
 
 	#define TEMPLU_XMIN 244
@@ -26,7 +26,7 @@
 	#ifdef PRINTTEMP
 		static const char tempLu_FracChar[4][3] PROGMEM = {"00", "25", "50", "75"};
 	#endif
-	
+
 	static inline const uint16_t __attribute__((always_inline)) getTemperature(uint16_t adcVal)
 	{
 		#ifdef PRINTTEMP
@@ -40,14 +40,14 @@
 		} else if(adcVal >= TEMPLU_XMAX) {
 			adcVal = TEMPLU_XMAX - 1;
 		}
-		
+
 		adcVal -= TEMPLU_XMIN;
 		uint8_t cIdx = 0;
 		while(adcVal >= TEMPLU_DXINXSCALE) {
 			adcVal -= TEMPLU_DXINXSCALE;
 			cIdx++;
 		}
-		
+
 		uint16_t yLow = pgm_read_word(tempLu_ADCTempLUT + cIdx);
 		uint16_t yHigh = pgm_read_word(tempLu_ADCTempLUT + cIdx + 1);
 		uint16_t grad = (yLow - yHigh + (1<<(TEMPLU_DXINXSCALE_ASPOWER - TEMPLU_GRADSCALEPWR - 1))) >> (TEMPLU_DXINXSCALE_ASPOWER - TEMPLU_GRADSCALEPWR); // Gradient

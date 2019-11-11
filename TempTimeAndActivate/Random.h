@@ -2,8 +2,8 @@
  * Random.h
  *
  * Created: 20/10/2019 13:41:56
- *  Author: Sam
- */ 
+ * Author: Sam
+ */
 
 
 #ifndef RANDOM_H_
@@ -38,7 +38,7 @@
 		EEARL = 0;
 		EECR |= (1<<EERE);
 		*(((uint8_t*)&_randomNumber) + 1) = EEDR;
-		
+
 		while(EECR & (1 << EEPE));
 		EEARL = 1;
 		EECR |= (1<<EERE);
@@ -51,7 +51,7 @@
 		EEDR = *((uint8_t*)&_randomNumber);
 		EECR |= (1<<EEMPE);
 		EECR |= (1<<EEPE);
-		
+
 		while(EECR & (1<<EEPE));
 		EEARL = 0;
 		EEDR = *(((uint8_t*)&_randomNumber) + 1);

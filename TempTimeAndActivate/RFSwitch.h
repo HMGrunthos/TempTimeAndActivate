@@ -2,8 +2,8 @@
  * RFSwitch.h
  *
  * Created: 20/10/2019 11:35:44
- *  Author: Sam
- */ 
+ * Author: Sam
+ */
 
 
 #ifndef RFSWITCH_H_
@@ -24,19 +24,19 @@
 			code |= (nAddressCode == i) ? 0b0 : 0b1;
 			code <<= 1;
 		}
-	
+
 		for (uint_fast8_t i = 0; i < 4; i++) {
 			code |= (nChannelCode == i) ? 0b0 : 0b1;
 			code <<= 1;
 		}
-	
+
 		code |= 0b1;
 		code <<= 1;
 		code |= 0b1;
 		code <<= 1;
 		code |= 0b1;
 		code <<= 1;
-	
+
 		code |= bStatus ? 0b1 : 0b0;
 
 		return code;

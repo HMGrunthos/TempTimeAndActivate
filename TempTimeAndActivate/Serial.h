@@ -2,8 +2,8 @@
  * Serial.h
  *
  * Created: 19/10/2019 11:20:21
- *  Author: Sam
- */ 
+ * Author: Sam
+ */
 
 #ifndef SERIAL_H_
 	#define SERIAL_H_
