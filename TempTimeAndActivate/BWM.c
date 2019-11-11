@@ -1,10 +1,10 @@
-#include <stdlib.h>
+// #include <stdlib.h>
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
 
-#include "Serial.h"
+// #include "Serial.h"
 #include "TempLookup.h"
 #include "RFSwitch.h"
 #include "Random.h"
@@ -41,7 +41,7 @@ static inline void toggleActiveIndicator(void);
 static inline void clearActiveIndicator(void);
 static inline void setActiveIndicator(void);
 static const uint_fast8_t testButtonPressed(void);
-static const uint_fast8_t __attribute__ ((noinline)) timeExpired(const uint_fast16_t);
+static const uint_fast8_t timeExpired(const uint_fast16_t tLimit, const uint_fast16_t lastTickValue);
 static void resetTimer(void);
 
 volatile static uint_fast16_t timerTick = 0;
@@ -80,6 +80,7 @@ int main(void)
 	uint16_t adcFilters[NCHAN];
 	initFilters(adcFilters);
 
+	uint_fast16_t lastTickValue;
 	uint_fast8_t testCounter = 0;
 	uint_fast8_t testLevel = pwmLevel;
 	enum TempMachineStates tempState = Sensing;
@@ -109,6 +110,11 @@ int main(void)
 			}
 		}
 
+		cli();
+			// Get the latest timer value so we can use it to toggle the power LED
+			lastTickValue = timerTick;
+		sei();
+
 		// This state machine controls the activation of the output based on the temperature window
 		switch(tempState) {
 			case Inhibit:
@@ -116,12 +122,14 @@ int main(void)
 					setOutput(0);
 				#endif // WARMOUT
 				cli(); // This will cause the processor to sleep with no way of waking
+				setActiveIndicator();
+				continue;
 				break;
 			case Active:
 				#ifndef WARMOUT
 					setOutput(pwmLevel);
 				#endif // WARMOUT
-				if(timeExpired(TOTICKS(ONTIME))) {
+				if(timeExpired(TOTICKS(ONTIME), lastTickValue)) {
 					tempState = Inhibit;
 				}
 				break;
@@ -155,14 +163,14 @@ int main(void)
 					#ifdef WARMOUT
 						setOutput(pwmLevel);
 					#endif // WARMOUT
-					if(timeExpired(TOTICKS(WARMTIME))) {
+					if(timeExpired(TOTICKS(WARMTIME), lastTickValue)) {
 						send(getCodeWord(RFADDRESS, RFCHANNEL, 0));
 						timeState = Expired;
 					}
 					break;
 				case Delay:
 					activeMask = 0x04;
-					if(timeExpired(randomDelay)) {
+					if(timeExpired(randomDelay, lastTickValue)) {
 						resetTimer();
 						send(getCodeWord(RFADDRESS, RFCHANNEL, 1));
 						timeState = Warm;
@@ -170,27 +178,17 @@ int main(void)
 					break;
 				case Wait:
 					activeMask = 0x04;
-					if(timeExpired(TOTICKS(WAITTIME))) {
+					if(timeExpired(TOTICKS(WAITTIME), lastTickValue)) {
 						resetTimer();
 						timeState = Delay;
 					}
 					break;
 			}
 
-			// Get the latest timer value so we can use it to toggle the power LED
-			uint_fast16_t lastTickValue;
-			cli();
-				lastTickValue = timerTick;
-			sei();
-
-			if(tempState == Inhibit) { // Power LED also indicates state
-				setActiveIndicator();
+			if(lastTickValue & activeMask) {
+				clearActiveIndicator();
 			} else {
-				if(lastTickValue & activeMask) {
-					clearActiveIndicator();
-				} else {
-					toggleActiveIndicator();
-				}
+				toggleActiveIndicator();
 			}
 		#endif // DISABLE_TIMING
 	}
@@ -340,20 +338,12 @@ static void initHW(void)
 
 static void resetTimer(void)
 {
-	cli();
-		timerTick = 0;
-	sei();
+	timerTick = 0;
 }
 
-static const uint_fast8_t timeExpired(const uint_fast16_t tLimit)
+static const uint_fast8_t timeExpired(const uint_fast16_t tLimit, const uint_fast16_t lastTickValue)
 {
-	uint_fast8_t expired;
-
-	cli();
-		expired = timerTick >= tLimit;
-	sei();
-
-	return expired;
+	return lastTickValue  >= tLimit;
 }
 
 ISR(WDT_vect)
