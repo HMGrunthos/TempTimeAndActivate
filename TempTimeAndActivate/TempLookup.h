@@ -27,7 +27,6 @@
 		static const char tempLu_FracChar[4][3] PROGMEM = {"00", "25", "50", "75"};
 	#endif
 	
-	// static const uint16_t __attribute__ ((noinline)) getTemperature(uint16_t adcVal)
 	static inline const uint16_t __attribute__((always_inline)) getTemperature(uint16_t adcVal)
 	{
 		#ifdef PRINTTEMP

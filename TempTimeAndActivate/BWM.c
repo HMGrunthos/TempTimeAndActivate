@@ -42,7 +42,7 @@ static inline void clearActiveIndicator(void);
 static inline void setActiveIndicator(void);
 static const uint_fast8_t testButtonPressed(void);
 static const uint_fast8_t timeExpired(const uint_fast16_t tLimit, const uint_fast16_t lastTickValue);
-static void resetTimer(void);
+static void __attribute__ ((noinline)) resetTimer(void);
 
 volatile static uint_fast16_t timerTick = 0;
 
@@ -89,6 +89,11 @@ int main(void)
 		sleep_enable(); // This regulates the loop rate to about 64Hz
 		sleep_cpu();
 
+		cli();
+			// Get the latest timer value so we can use it to toggle the power LED
+			lastTickValue = timerTick;
+		sei();
+
 		// This block defines the test and configuration behaviour
 		if(testButtonPressed()) { // If the input is as active then...
 			if(testCounter < 0xFF) { // Count down until the configuration duration (i.e. hold the button down to enter configuration)
@@ -109,11 +114,6 @@ int main(void)
 				}
 			}
 		}
-
-		cli();
-			// Get the latest timer value so we can use it to toggle the power LED
-			lastTickValue = timerTick;
-		sei();
 
 		// This state machine controls the activation of the output based on the temperature window
 		switch(tempState) {
@@ -184,7 +184,7 @@ int main(void)
 					}
 					break;
 			}
-
+			// Toggle&flash the power LED to indicate the timing state
 			if(lastTickValue & activeMask) {
 				clearActiveIndicator();
 			} else {
@@ -308,22 +308,19 @@ static void initHW(void)
 	// RF Tx on pin 6/PB2
 	// Active LED on pin PB5
 	// Test/Config button on PB1
-	PORTB |= (1 << PORTB5); // This sets the active LED (on the reset pin)
-	//PORTB |= (1 << PORTB4); // This sets the active LED (on the test pin)
-	DDRB |= (1 << DDB5) | (1 << DDB2) | (1 << DDB0); // Three pins as outputs
+
+	PORTB = (1 << PORTB5) | (1 << PORTB1); // This sets the active LED (on the reset pin) and the pull-up on the test button pin (PB1)
+	DDRB = (1 << DDB5) | (1 << DDB2) | (1 << DDB0); // Three pins as outputs
 	#ifdef PB4ASOUTPUT
 		DDRB |= (1 << DDB4); // In case we want to use PB4 as an output debugging pin
 	#endif
 
-	// Enable the pullup on PB1
-	PORTB |= (1 << PORTB1);
-
 	#if F_CPU==1200000UL
 		// ADC clock is CPUClock/8 or 150kHz at 1.2MHz
-		ADCSRA |= (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
+		ADCSRA = (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
 	#elif F_CPU==9600000UL
 		// ADC clock is CPUClock/128 or 75kHz at 9.6MHz
-		ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
+		ADCSRA = (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
 	#endif
 
 	WDTCR = (1 << WDTIE); // Watchdog timer trips every 16ms-ish
@@ -338,7 +335,9 @@ static void initHW(void)
 
 static void resetTimer(void)
 {
-	timerTick = 0;
+	cli();
+		timerTick = 0;
+	sei();
 }
 
 static const uint_fast8_t timeExpired(const uint_fast16_t tLimit, const uint_fast16_t lastTickValue)

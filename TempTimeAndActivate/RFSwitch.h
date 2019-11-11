@@ -12,13 +12,11 @@
 	#include <util/delay.h>
 
 	#define RFS_CODEWORDLENGTH 12
-	#define RFS_PULSELENGTH 350
 	#define RFS_NREPEATTRANSMIT 32
 	#define RFS_PORT PORTB2
 	// #define RFS_PORT PORTB4
 
 	static inline const uint_fast16_t __attribute__((always_inline)) getCodeWord(uint_fast8_t nAddressCode, uint_fast8_t nChannelCode, uint_fast8_t bStatus)
-	// static inline const uint_fast16_t getCodeWord(uint_fast8_t nAddressCode, uint_fast8_t nChannelCode, uint_fast8_t bStatus)
 	{
 		uint_fast16_t code = 0;
 
