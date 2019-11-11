@@ -1,10 +1,7 @@
-// #include <stdlib.h>
-
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
 
-// #include "Serial.h"
 #include "TempLookup.h"
 #include "RFSwitch.h"
 #include "Random.h"
@@ -13,6 +10,8 @@
 // #define NOPWM
 // #define PB4ASOUTPUT
 // #define WARMOUT
+// #define PB4ASACTIVEINDICATOR
+// #define SHORTDELAY
 
 #define ONTIME 50 // In seconds
 #define TARGETTEMP 41 // Target temperature
@@ -20,33 +19,48 @@
 #define NCHAN 2 // Number of temperature channels to monitor
 
 #define WAITTIME 7200 // Two hours
-// #define WAITTIME 8 // Two seconds
 #define WARMTIME 1800 // Thirty minutes
-// #define WARMTIME 20 // Twenty seconds
 
 #define RFADDRESS 0
 #define RFCHANNEL 0
 
 #define TICKPERIOD 0.286225
 #define TOTICKS(period) ((uint_fast16_t)(period)/(float)TICKPERIOD + 0.5)
-	
+
+#ifdef PB4ASACTIVEINDICATOR // If PB4 is our indicator then enable the pin in the DDR
+	#define PB4ASOUTPUT
+#endif
+
+#ifdef SHORTDELAY // Then redefine the time delay
+	#undef WAITTIME
+	#undef WARMTIME
+	#define WAITTIME 8 // Two seconds
+	#define WARMTIME 20 // Twenty seconds
+#endif
+
+// Hardware init.
 static void initHW(void);
-static const int16_t adcRead(const uint_fast8_t channel);
+// ADC init.
 static void initFilters(uint16_t *adcFilters);
+static const int16_t adcRead(const uint_fast8_t channel);
 static const uint_fast8_t tempInBand(uint16_t *adcFilters);
+// PWM level management
 static uint_fast8_t getPWMLevelFromEEPROM(void);
 static void setPWMLevelInEEPROM(const uint_fast8_t level);
 static void setOutput(const uint_fast8_t level);
+// Indicator control
 static inline void toggleActiveIndicator(void);
 static inline void clearActiveIndicator(void);
 static inline void setActiveIndicator(void);
-static const uint_fast8_t testButtonPressed(void);
-static const uint_fast8_t timeExpired(const uint_fast16_t tLimit, const uint_fast16_t lastTickValue);
+static inline const uint_fast8_t testButtonPressed(void);
+// Timer functions
+static inline const uint_fast8_t timeExpired(const uint_fast16_t tLimit, const uint_fast16_t lastTickValue);
 static void __attribute__ ((noinline)) resetTimer(void);
 
+// Divided timer count
 volatile static uint_fast16_t timerTick = 0;
 
-#define FIX_POINTER(_ptr) __asm__ __volatile__("" : "=b" (_ptr) : "0" (_ptr))
+// #define FIX_POINTER(_ptr) __asm__ __volatile__("" : "=b" (_ptr) : "0" (_ptr))
 
 enum TempMachineStates {
 	Inhibit,
@@ -74,7 +88,9 @@ int main(void)
 		// randomDelay -= randomDelay >> 2; // 0 to 3 hours 54 minutes
 		randomDelay = 5*(randomDelay >> 3); // 0 to 3 hours 15 minutes
 		// randomDelay = randomDelay >> 1; // 0 to 2 hours 36 minutes
-		// randomDelay = TOTICKS(8); // Eight seconds
+		#ifdef SHORTDELAY
+			randomDelay = TOTICKS(8); // Eight seconds
+		#endif
 	#endif // DISABLE_TIMING
 
 	uint16_t adcFilters[NCHAN];
@@ -86,8 +102,7 @@ int main(void)
 	enum TempMachineStates tempState = Sensing;
 	enum TimerMachineStates timeState = Wait;
 	while (1) {
-		sleep_enable(); // This regulates the loop rate to about 64Hz
-		sleep_cpu();
+		sleep_mode(); // This regulates the loop rate to about 64Hz
 
 		cli();
 			// Get the latest timer value so we can use it to toggle the power LED
@@ -122,16 +137,17 @@ int main(void)
 					setOutput(0);
 				#endif // WARMOUT
 				cli(); // This will cause the processor to sleep with no way of waking
-				setActiveIndicator();
-				continue;
+				continue; // This should cause a sleep without means for waking
 				break;
 			case Active:
 				#ifndef WARMOUT
 					setOutput(pwmLevel);
 				#endif // WARMOUT
+				setActiveIndicator(); // Set the power indicator to solid on
 				if(timeExpired(TOTICKS(ONTIME), lastTickValue)) {
 					tempState = Inhibit;
 				}
+				continue;
 				break;
 			case Sensing:
 				#ifndef WARMOUT
@@ -153,13 +169,13 @@ int main(void)
 			uint_fast8_t activeMask; // This mask controls the toggling of the power/status LED
 			switch(timeState) {
 				case Expired:
-					activeMask = 0x20;
+					activeMask = 0x20; // These masks determine the flash period of the power LED
 					#ifdef WARMOUT
 						setOutput(0);
 					#endif // WARMOUT
 					break;
 				case Warm:
-					activeMask = 0x01;
+					activeMask = 0x01; // Power LED flash period
 					#ifdef WARMOUT
 						setOutput(pwmLevel);
 					#endif // WARMOUT
@@ -169,7 +185,7 @@ int main(void)
 					}
 					break;
 				case Delay:
-					activeMask = 0x04;
+					activeMask = 0x04; // Power LED flash period
 					if(timeExpired(randomDelay, lastTickValue)) {
 						resetTimer();
 						send(getCodeWord(RFADDRESS, RFCHANNEL, 1));
@@ -177,14 +193,15 @@ int main(void)
 					}
 					break;
 				case Wait:
-					activeMask = 0x04;
+					activeMask = 0x04; // Power LED flash period
 					if(timeExpired(TOTICKS(WAITTIME), lastTickValue)) {
 						resetTimer();
 						timeState = Delay;
 					}
 					break;
 			}
-			// Toggle&flash the power LED to indicate the timing state
+
+			// Toggle/flash the power LED to indicate the timing state
 			if(lastTickValue & activeMask) {
 				clearActiveIndicator();
 			} else {
@@ -232,30 +249,39 @@ static void setOutput(const uint_fast8_t level)
 
 static void toggleActiveIndicator(void)
 {
-	PINB |= (1 << PINB5);
-	// PINB |= (1 << PINB4);
+	#ifndef PB4ASACTIVEINDICATOR
+		PINB |= (1 << PINB5);
+	#else
+		PINB |= (1 << PINB4);
+	#endif
 }
 
 static void clearActiveIndicator(void)
 {
-	PORTB &= ~(1 << PORTB5);
-	// PORTB &= ~(1 << PORTB4);
+	#ifndef PB4ASACTIVEINDICATOR
+		PORTB &= ~(1 << PORTB5);
+	#else
+		PORTB &= ~(1 << PORTB4);
+	#endif
 }
 
 static void setActiveIndicator(void)
 {
-	PORTB |= (1 << PORTB5);
-	// PORTB |= (1 << PORTB4);
+	#ifndef PB4ASACTIVEINDICATOR
+		PORTB |= (1 << PORTB5);
+	#else
+		PORTB |= (1 << PORTB4);
+	#endif
 }
 
-static const uint_fast8_t testButtonPressed(void)
+static inline const uint_fast8_t testButtonPressed(void)
 {
 	return (PINB & (1<<PINB1)) == 0;
 }
 
 static void initFilters(uint16_t *adcFilters)
 {
-	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
+	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) { // Initialise all the channels
 		adcFilters[cIdx] = 0;
 	}
 	for(uint_fast8_t ii = 0; ii < (1<<5); ii++) {
@@ -270,20 +296,20 @@ static const uint_fast8_t tempInBand(uint16_t *adcFilters)
 	const uint16_t lowerThresh = TL_TOFIXEDPOINT(TARGETTEMP) - (TL_TOFIXEDPOINT(TEMPBAND)>>1);
 	const uint16_t upperThresh = TL_TOFIXEDPOINT(TARGETTEMP) + (TL_TOFIXEDPOINT(TEMPBAND)>>1);
 
-   for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
+	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
 		adcFilters[cIdx] -= (adcFilters[cIdx] + (1<<4)) >> 5; // Remove one 1/32 of old data from the temperature accumulator
 		adcFilters[cIdx] += adcRead(cIdx); // Add one 1/32 of new measurement
-      uint16_t temp = getTemperature((adcFilters[cIdx] + (1<<4)) >> 5); // Get the filtered temperature
+		uint16_t temp = getTemperature((adcFilters[cIdx] + (1<<4)) >> 5); // Get the filtered temperature
 
 		// If the temperature exceeds either the top or bottom theshold on either sensor then we're out of bounds
-      if(temp < lowerThresh) {
-         return 0;
-      } else if(temp > upperThresh) {
-         return 0;
-      }
-   }
+		if(temp < lowerThresh) {
+			return 0;
+		} else if(temp > upperThresh) {
+			return 0;
+		}
+	}
 
-   return 1; // Only if we get here is everything within the bounds
+	return 1; // Only if we get here is everything within bounds
 }
 
 static const int16_t adcRead(const uint_fast8_t channel)
@@ -293,13 +319,11 @@ static const int16_t adcRead(const uint_fast8_t channel)
 	} else {
 		ADMUX = (1 << MUX1) | (0 << MUX0); // ADC2 (lower port)
 	}
-	
+
 	ADCSRA |= (1 << ADSC); // Start the conversion
 	while(ADCSRA & (1 << ADSC)); // Wait for conversion to complete
 
-	int16_t adcResult = ADC; // 10-bit resolution (both bytes)
-
-	return adcResult;
+	return ADC; // 10-bit resolution (both bytes)
 }
 
 static void initHW(void)
@@ -340,9 +364,9 @@ static void resetTimer(void)
 	sei();
 }
 
-static const uint_fast8_t timeExpired(const uint_fast16_t tLimit, const uint_fast16_t lastTickValue)
+static inline const uint_fast8_t timeExpired(const uint_fast16_t tLimit, const uint_fast16_t lastTickValue)
 {
-	return lastTickValue  >= tLimit;
+	return lastTickValue >= tLimit;
 }
 
 ISR(WDT_vect)
