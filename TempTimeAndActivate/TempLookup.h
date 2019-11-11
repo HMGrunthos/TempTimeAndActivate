@@ -59,15 +59,6 @@
 			uint16_t tempRndF = temp + (1<<(TEMPLU_YSCALEPOWER - 3)); // Temperature rounded for display
 
 			uartPuts_P(PSTR(", "));
-			utoa(cIdx, buff, 10);
-			uartPuts(buff);
-			uartPuts_P(PSTR(", "));
-			utoa(adcVal, buff, 10);
-			uartPuts(buff);
-			uartPuts_P(PSTR(", "));
-			utoa(grad, buff, 10);
-			uartPuts(buff);
-			uartPuts_P(PSTR(", "));
 			utoa(temp, buff, 10);
 			uartPuts(buff);
 			uartPuts_P(PSTR(", "));
