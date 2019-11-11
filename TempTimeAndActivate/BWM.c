@@ -47,14 +47,14 @@ static const uint_fast8_t tempInBand(uint16_t *adcFilters);
 // PWM level management
 static uint_fast8_t getPWMLevelFromEEPROM(void);
 static void setPWMLevelInEEPROM(const uint_fast8_t level);
-static void setOutput(const uint_fast8_t level);
+static inline void setOutput(const uint_fast8_t level);
 // Indicator control
 static inline void toggleActiveIndicator(void);
 static inline void clearActiveIndicator(void);
 static inline void setActiveIndicator(void);
 static inline const uint_fast8_t testButtonPressed(void);
 // Timer functions
-static inline const uint_fast8_t timeExpired(const uint_fast16_t tLimit, const uint_fast16_t lastTickValue);
+static inline const uint_fast8_t timeExpired(const uint_fast16_t tLimit, const uint_fast16_t currentTickValue);
 static void __attribute__ ((noinline)) resetTimer(void);
 
 // Divided timer count
@@ -96,7 +96,7 @@ int main(void)
 	uint16_t adcFilters[NCHAN];
 	initFilters(adcFilters);
 
-	uint_fast16_t lastTickValue;
+	uint_fast16_t currentTickValue;
 	uint_fast8_t testCounter = 0;
 	uint_fast8_t testLevel = pwmLevel;
 	enum TempMachineStates tempState = Sensing;
@@ -106,12 +106,12 @@ int main(void)
 
 		cli();
 			// Get the latest timer value so we can use it to toggle the power LED
-			lastTickValue = timerTick;
+			currentTickValue = timerTick;
 		sei();
 
 		// This block defines the test and configuration behaviour
-		if(testButtonPressed()) { // If the input is as active then...
-			if(testCounter < 0xFF) { // Count down until the configuration duration (i.e. hold the button down to enter configuration)
+		if(testButtonPressed()) { // If the input is active then...
+			if(testCounter < 0xFF) { // Count down until the configuration duration (i.e. hold the button down to enter configuration mode)
 				testCounter++;
 			} else {
 				testLevel++;
@@ -121,7 +121,7 @@ int main(void)
 			if(testCounter > 0) {
 				testCounter--;
 			} else {
-				if(pwmLevel != testLevel) {
+				if(pwmLevel != testLevel) { // If the level was changed on exit from test/configuration mode
 					// Set EEPROM
 					setPWMLevelInEEPROM(testLevel);
 					pwmLevel = testLevel;
@@ -136,30 +136,27 @@ int main(void)
 				#ifndef WARMOUT
 					setOutput(0);
 				#endif // WARMOUT
-				cli(); // This will cause the processor to sleep with no way of waking
-				continue; // This should cause a sleep without means for waking
+				cli(); // This will cause the processor to sleep without means of waking
+				continue; // Now go to the sleep mode
 				break;
 			case Active:
 				#ifndef WARMOUT
 					setOutput(pwmLevel);
 				#endif // WARMOUT
-				setActiveIndicator(); // Set the power indicator to solid on
-				if(timeExpired(TOTICKS(ONTIME), lastTickValue)) {
+				if(timeExpired(TOTICKS(ONTIME), currentTickValue)) {
 					tempState = Inhibit;
 				}
 				continue;
 				break;
 			case Sensing:
-				#ifndef WARMOUT
-					// setOutput(0); // The system starts in the state - it will be overridden by the test functions, power cycling will reset this state
-				#endif // WARMOUT
 				if(tempInBand(adcFilters)) {
 					resetTimer();
 					#ifndef DISABLE_TIMING
 						send(getCodeWord(RFADDRESS, RFCHANNEL, 0));
+						setActiveIndicator(); // Set the power indicator to solid on
 					#endif // DISABLE_TIMING
 					tempState = Active;
-					timeState = Expired;
+					continue;
 				}
 				break;
 		}
@@ -179,14 +176,14 @@ int main(void)
 					#ifdef WARMOUT
 						setOutput(pwmLevel);
 					#endif // WARMOUT
-					if(timeExpired(TOTICKS(WARMTIME), lastTickValue)) {
+					if(timeExpired(TOTICKS(WARMTIME), currentTickValue)) {
 						send(getCodeWord(RFADDRESS, RFCHANNEL, 0));
 						timeState = Expired;
 					}
 					break;
 				case Delay:
 					activeMask = 0x04; // Power LED flash period
-					if(timeExpired(randomDelay, lastTickValue)) {
+					if(timeExpired(randomDelay, currentTickValue)) {
 						resetTimer();
 						send(getCodeWord(RFADDRESS, RFCHANNEL, 1));
 						timeState = Warm;
@@ -194,7 +191,7 @@ int main(void)
 					break;
 				case Wait:
 					activeMask = 0x04; // Power LED flash period
-					if(timeExpired(TOTICKS(WAITTIME), lastTickValue)) {
+					if(timeExpired(TOTICKS(WAITTIME), currentTickValue)) {
 						resetTimer();
 						timeState = Delay;
 					}
@@ -202,7 +199,7 @@ int main(void)
 			}
 
 			// Toggle/flash the power LED to indicate the timing state
-			if(lastTickValue & activeMask) {
+			if(currentTickValue & activeMask) {
 				clearActiveIndicator();
 			} else {
 				toggleActiveIndicator();
@@ -234,7 +231,7 @@ static void setPWMLevelInEEPROM(const uint_fast8_t level)
 	sei();
 }
 
-static void setOutput(const uint_fast8_t level)
+static inline void setOutput(const uint_fast8_t level)
 {
 	#ifdef NOPWM
 		if(level == 0) {
@@ -330,10 +327,10 @@ static void initHW(void)
 {
 	// ZTX450 is on pin 5/PB0
 	// RF Tx on pin 6/PB2
-	// Active LED on pin PB5
 	// Test/Config button on PB1
+	// Active LED on pin PB5
 
-	PORTB = (1 << PORTB5) | (1 << PORTB1); // This sets the active LED (on the reset pin) and the pull-up on the test button pin (PB1)
+	PORTB = (1 << PORTB1); // Set the pull-up on the test button pin (PB1)
 	DDRB = (1 << DDB5) | (1 << DDB2) | (1 << DDB0); // Three pins as outputs
 	#ifdef PB4ASOUTPUT
 		DDRB |= (1 << DDB4); // In case we want to use PB4 as an output debugging pin
@@ -364,9 +361,9 @@ static void resetTimer(void)
 	sei();
 }
 
-static inline const uint_fast8_t timeExpired(const uint_fast16_t tLimit, const uint_fast16_t lastTickValue)
+static inline const uint_fast8_t timeExpired(const uint_fast16_t tLimit, const uint_fast16_t currentTickValue)
 {
-	return lastTickValue >= tLimit;
+	return currentTickValue >= tLimit;
 }
 
 ISR(WDT_vect)
