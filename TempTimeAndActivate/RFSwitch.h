@@ -17,7 +17,8 @@
 	#define RFS_PORT PORTB2
 	// #define RFS_PORT PORTB4
 
-	static uint_fast16_t getCodeWord(uint_fast8_t nAddressCode, uint_fast8_t nChannelCode, uint_fast8_t bStatus)
+	static inline const uint_fast16_t __attribute__((always_inline)) getCodeWord(uint_fast8_t nAddressCode, uint_fast8_t nChannelCode, uint_fast8_t bStatus)
+	// static inline const uint_fast16_t getCodeWord(uint_fast8_t nAddressCode, uint_fast8_t nChannelCode, uint_fast8_t bStatus)
 	{
 		uint_fast16_t code = 0;
 
@@ -57,7 +58,7 @@
 	#define SHORTPULSE 816
 	#define LONGPULSE 2481
 	#define SYNCPULSE 25555
-	static void send(uint_fast16_t code)
+	static void send(const uint_fast16_t code)
 	{
 		for(uint_fast8_t nRepeat =	0; nRepeat < RFS_NREPEATTRANSMIT; nRepeat++) {
 			cli();
