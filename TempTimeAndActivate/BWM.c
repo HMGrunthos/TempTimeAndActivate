@@ -109,7 +109,7 @@ int main(void)
 			currentTickValue = timerTick;
 		sei();
 
-		// This block defines the test and configuration behaviour
+		// This block defines the test and configuration behavior
 		if(testButtonPressed()) { // If the input is active then...
 			if(testCounter < 0xFF) { // Count down until the configuration duration (i.e. hold the button down to enter configuration mode)
 				testCounter++;
@@ -278,7 +278,7 @@ static inline const uint_fast8_t testButtonPressed(void)
 
 static void initFilters(uint16_t *adcFilters)
 {
-	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) { // Initialise all the channels
+	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) { // Initialize all the channels
 		adcFilters[cIdx] = 0;
 	}
 	for(uint_fast8_t ii = 0; ii < (1<<5); ii++) {
@@ -298,7 +298,7 @@ static const uint_fast8_t tempInBand(uint16_t *adcFilters)
 		adcFilters[cIdx] += adcRead(cIdx); // Add one 1/32 of new measurement
 		uint16_t temp = getTemperature((adcFilters[cIdx] + (1<<4)) >> 5); // Get the filtered temperature
 
-		// If the temperature exceeds either the top or bottom theshold on either sensor then we're out of bounds
+		// If the temperature exceeds either the top or bottom threshold on either sensor then we're out of bounds
 		if(temp < lowerThresh) {
 			return 0;
 		} else if(temp > upperThresh) {
@@ -370,7 +370,7 @@ ISR(WDT_vect)
 {
 	static uint_fast8_t divWDT;
 	divWDT++;
-	if((divWDT & 0x0F) == 0) { // Divide the 64Hz ish by 16 to give a period close to 0.25s (4Hz)
+	if((divWDT & 0x0F) == 0) { // Divide the 64Hz-ish by 16 to give a period close to 0.25s (4Hz)
 		timerTick++;
 	}
 }
