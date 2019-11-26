@@ -14,8 +14,8 @@
 // #define SHORTDELAY
 
 #define ONTIME 50 // In seconds
-#define TARGETTEMP 41 // Target temperature
-#define TEMPBAND 2 // Allowed slop
+#define TARGETTEMP 40.5 // Target temperature
+#define TEMPBAND 1.75 // Allowed slop
 #define NCHAN 2 // Number of temperature channels to monitor
 
 #define WAITTIME 7200 // Two hours
@@ -115,6 +115,11 @@ int main(void)
 				testCounter++;
 			} else {
 				testLevel++;
+				setOutput(0);
+				#pragma GCC unroll 0
+				for(uint_fast8_t itr = 0; itr < 4; itr++) {
+					_delay_loop_2(65535);
+				}
 			}
 			setOutput(testLevel);
 		} else {
@@ -290,8 +295,8 @@ static void initFilters(uint16_t *adcFilters)
 
 static const uint_fast8_t tempInBand(uint16_t *adcFilters)
 {
-	const uint16_t lowerThresh = TL_TOFIXEDPOINT(TARGETTEMP) - (TL_TOFIXEDPOINT(TEMPBAND)>>1);
-	const uint16_t upperThresh = TL_TOFIXEDPOINT(TARGETTEMP) + (TL_TOFIXEDPOINT(TEMPBAND)>>1);
+	const uint16_t lowerThresh = TL_TOFIXEDPOINT(TARGETTEMP) - ((TL_TOFIXEDPOINT(TEMPBAND) + (1<<0))>>1);
+	const uint16_t upperThresh = TL_TOFIXEDPOINT(TARGETTEMP) + ((TL_TOFIXEDPOINT(TEMPBAND) + (1<<0))>>1);
 
 	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
 		adcFilters[cIdx] -= (adcFilters[cIdx] + (1<<4)) >> 5; // Remove one 1/32 of old data from the temperature accumulator
