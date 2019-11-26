@@ -295,8 +295,8 @@ static void initFilters(uint16_t *adcFilters)
 
 static const uint_fast8_t tempInBand(uint16_t *adcFilters)
 {
-	const uint16_t lowerThresh = TL_TOFIXEDPOINT(TARGETTEMP) - TL_TOFIXEDPOINT(TEMPBAND/(float)2);
-	const uint16_t upperThresh = TL_TOFIXEDPOINT(TARGETTEMP) + TL_TOFIXEDPOINT(TEMPBAND/(float)2);
+	const uint16_t lowerThresh = TL_TOFIXEDPOINT(TARGETTEMP - (TEMPBAND/(float)2));
+	const uint16_t upperThresh = TL_TOFIXEDPOINT(TARGETTEMP + (TEMPBAND/(float)2));
 
 	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
 		adcFilters[cIdx] -= (adcFilters[cIdx] + (1<<4)) >> 5; // Remove one 1/32 of old data from the temperature accumulator
