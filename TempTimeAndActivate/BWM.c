@@ -14,8 +14,8 @@
 // #define SHORTDELAY
 
 #define ONTIME 50 // In seconds
-#define TARGETTEMP 40.5 // Target temperature
-#define TEMPBAND 1.75 // Allowed slop
+#define TARGETTEMP 40 // Target temperature
+#define TEMPBAND 1.5 // Allowed slop
 #define NCHAN 2 // Number of temperature channels to monitor
 
 #define WAITTIME 7200 // Two hours
@@ -295,8 +295,10 @@ static void initFilters(uint16_t *adcFilters)
 
 static const uint_fast8_t tempInBand(uint16_t *adcFilters)
 {
-	const uint16_t lowerThresh = TL_TOFIXEDPOINT(TARGETTEMP - (TEMPBAND/(float)2));
-	const uint16_t upperThresh = TL_TOFIXEDPOINT(TARGETTEMP + (TEMPBAND/(float)2));
+	const uint16_t lowerThresh = TL_TOFIXEDPOINT(((float)TARGETTEMP) - (TEMPBAND/(float)2));
+	const uint16_t upperThresh = TL_TOFIXEDPOINT(((float)TARGETTEMP) + (TEMPBAND/(float)2));
+
+	uint_fast8_t rVal = 1; // Assume in bounds to begin with
 
 	for(uint_fast8_t cIdx = 0; cIdx < NCHAN; cIdx++) {
 		adcFilters[cIdx] -= (adcFilters[cIdx] + (1<<4)) >> 5; // Remove one 1/32 of old data from the temperature accumulator
@@ -305,13 +307,13 @@ static const uint_fast8_t tempInBand(uint16_t *adcFilters)
 
 		// If the temperature exceeds either the top or bottom threshold on either sensor then we're out of bounds
 		if(temp < lowerThresh) {
-			return 0;
+			rVal = 0;
 		} else if(temp > upperThresh) {
-			return 0;
+			rVal = 0;
 		}
 	}
 
-	return 1; // Only if we get here is everything within bounds
+	return rVal;
 }
 
 static const int16_t adcRead(const uint_fast8_t channel)

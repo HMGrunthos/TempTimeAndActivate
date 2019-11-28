@@ -21,7 +21,7 @@
 	#define TEMPLU_TABLESIZE 16
 	static const uint16_t tempLu_ADCTempLUT[TEMPLU_TABLESIZE] PROGMEM = {50451, 46007, 41984, 38283, 34832, 31576, 28473, 25488, 22591, 19757, 16961, 14181, 11395, 8579, 5705, 2743};
 
-	#define TL_TOFIXEDPOINT(inDegC) ((uint16_t)(inDegC*(float)(1<<TEMPLU_YSCALEPOWER) + 0.5))
+	#define TL_TOFIXEDPOINT(inDegC) ((uint16_t)((inDegC)*(float)(1<<TEMPLU_YSCALEPOWER) + 0.5))
 
 	#ifdef PRINTTEMP
 		static const char tempLu_FracChar[4][3] PROGMEM = {"00", "25", "50", "75"};
