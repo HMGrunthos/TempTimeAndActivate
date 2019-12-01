@@ -102,7 +102,7 @@ int main(void)
 	enum TempMachineStates tempState = Sensing;
 	enum TimerMachineStates timeState = Wait;
 	while (1) {
-		sleep_mode(); // This regulates the loop rate to about 64Hz
+		sleep_cpu(); // This regulates the loop rate to about 64Hz
 
 		cli();
 			// Get the latest timer value so we can use it to toggle the power LED
@@ -116,9 +116,9 @@ int main(void)
 			} else {
 				testLevel++;
 				setOutput(0);
-				#pragma GCC unroll 0
-				for(uint_fast8_t itr = 0; itr < 4; itr++) {
-					_delay_loop_2(65535);
+				// #pragma GCC unroll 0
+				for(uint_fast8_t itr = 0; itr < 6; itr++) {
+					sleep_cpu();
 				}
 			}
 			setOutput(testLevel);
@@ -357,6 +357,8 @@ static void initHW(void)
 		TCCR0A = (1<<COM0A1) | (0<<COM0A0) | (1 << WGM00); // PWM(Phase Correct)
 		TCCR0B = (1 << CS00); // Divide input clock by 1 (i.e. no divide)
 	#endif
+
+	sleep_enable();
 
 	sei();
 }
