@@ -4,6 +4,7 @@
 
 #include "TempLookup.h"
 #include "RFSwitch.h"
+#include "SimpleEEPROMInterface.h"
 #include "Random.h"
 
 // #define DISABLE_TIMING
@@ -45,8 +46,8 @@ static void initFilters(uint16_t *adcFilters);
 static const int16_t adcRead(const uint_fast8_t channel);
 static const uint_fast8_t tempInBand(uint16_t *adcFilters);
 // PWM level management
-static uint_fast8_t getPWMLevelFromEEPROM(void);
-static void setPWMLevelInEEPROM(const uint_fast8_t level);
+static inline uint_fast8_t getPWMLevelFromEEPROM(void);
+static inline void setPWMLevelInEEPROM(const uint_fast8_t level);
 static inline void setOutput(const uint_fast8_t level);
 // Indicator control
 static inline void toggleActiveIndicator(void);
@@ -77,11 +78,10 @@ enum TimerMachineStates {
 
 int main(void)
 {
-	random16InitFromEEPROM(); // This is before the HW init because I don't want interrupts while I'm accessing the EEPROM
-
-	uint_fast8_t pwmLevel = getPWMLevelFromEEPROM(); // Same... assumes interrupts are off
-
 	initHW();
+
+	random16InitFromEEPROM();
+	uint_fast8_t pwmLevel = getPWMLevelFromEEPROM();
 
 	#ifndef DISABLE_TIMING
 		uint_fast16_t randomDelay = getLastRandomNumber(); // 0 to 5 hours 13 minutes
@@ -102,7 +102,7 @@ int main(void)
 	enum TempMachineStates tempState = Sensing;
 	enum TimerMachineStates timeState = Wait;
 	while (1) {
-		sleep_cpu(); // This regulates the loop rate to about 64Hz
+		sleep_mode(); // This regulates the loop rate to about 64Hz
 
 		cli();
 			// Get the latest timer value so we can use it to toggle the power LED
@@ -118,7 +118,7 @@ int main(void)
 				setOutput(0);
 				// #pragma GCC unroll 0
 				for(uint_fast8_t itr = 0; itr < 6; itr++) {
-					sleep_cpu();
+					sleep_mode();
 				}
 			}
 			setOutput(testLevel);
@@ -213,27 +213,14 @@ int main(void)
 	}
 }
 
-static uint_fast8_t getPWMLevelFromEEPROM(void)
+static inline uint_fast8_t getPWMLevelFromEEPROM(void)
 {
-	uint_fast8_t level;
-
-	while(EECR & (1 << EEPE));
-	EEARL = 2;
-	EECR |= (1<<EERE);
-	level = EEDR;
-
-	return level;
+	return getByteFromEEPROM(2);
 }
 
-static void setPWMLevelInEEPROM(const uint_fast8_t level)
+static inline void setPWMLevelInEEPROM(const uint_fast8_t level)
 {
-	cli();
-		while(EECR & (1<<EEPE));
-		EEARL = 2;
-		EEDR = level;
-		EECR |= (1<<EEMPE);
-		EECR |= (1<<EEPE);
-	sei();
+	setByteInEEPROM(level, 2);
 }
 
 static inline void setOutput(const uint_fast8_t level)
@@ -357,8 +344,6 @@ static void initHW(void)
 		TCCR0A = (1<<COM0A1) | (0<<COM0A0) | (1 << WGM00); // PWM(Phase Correct)
 		TCCR0B = (1 << CS00); // Divide input clock by 1 (i.e. no divide)
 	#endif
-
-	sleep_enable();
 
 	sei();
 }

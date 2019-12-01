@@ -31,32 +31,14 @@
 		_randomNumber = seed;
 	}
 
-	static inline void random16InitFromEEPROM(void) // Make sure this is called before interrupts are enabled
+	static inline void random16InitFromEEPROM(void)
 	{
-		// cli(); // See above
-		while(EECR & (1 << EEPE));
-		EEARL = 0;
-		EECR |= (1<<EERE);
-		*(((uint8_t*)&_randomNumber) + 1) = EEDR;
-
-		while(EECR & (1 << EEPE));
-		EEARL = 1;
-		EECR |= (1<<EERE);
-		*((uint8_t*)&_randomNumber) = EEDR;
+		*(((uint8_t*)&_randomNumber) + 1) = getByteFromEEPROM(0);
+		*((uint8_t*)&_randomNumber) = getByteFromEEPROM(1);
 
 		random16();
 
-		while(EECR & (1 << EEPE));
-		EECR = (0<<EEPM1) | (0<<EEPM0);
-		EEDR = *((uint8_t*)&_randomNumber);
-		EECR |= (1<<EEMPE);
-		EECR |= (1<<EEPE);
-
-		while(EECR & (1<<EEPE));
-		EEARL = 0;
-		EEDR = *(((uint8_t*)&_randomNumber) + 1);
-		EECR |= (1<<EEMPE);
-		EECR |= (1<<EEPE);
-		// sei();
+		setByteInEEPROM(*((uint8_t*)&_randomNumber), 1);
+		setByteInEEPROM(*(((uint8_t*)&_randomNumber) + 1), 0);
 	}
 #endif /* RANDOM_H_ */
