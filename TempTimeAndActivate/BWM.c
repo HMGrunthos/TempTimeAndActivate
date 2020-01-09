@@ -15,7 +15,7 @@
 // #define SHORTDELAY
 
 #define ONTIME 50 // In seconds
-#define TARGETTEMP 39 // Target temperature
+#define TARGETTEMP 39.75 // Target temperature
 #define TEMPBAND 1.5 // Allowed slop
 #define NCHAN 2 // Number of temperature channels to monitor
 
