@@ -3,6 +3,10 @@
  *
  * Created: 20/10/2019 13:41:56
  * Author: Sam
+ *
+ * Original code: https://blog.podkalicki.com/attiny13-pseudo-random-numbers/
+ * Original code: https://github.com/lpodkalicki/blog/tree/master/avr/attiny13/009_lightweigth_prng_based_on_lfsr
+ *
  */
 
 
